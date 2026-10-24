@@ -765,4 +765,15 @@
 - **Quirúrgica del tool (lección):** `edit_file_tool` fallaba en batches con "no match found" aunque los anchors parecieran correctos. Causa 1: un edit tenía el `);` final omitido en el replace_from. Causa 2: el bloque de `scan_directories` está indentado 8/12 spaces (NO 16 como sugería la lectura visual) — mi replace_from llevaba indentación inventada. Resolución: aplicar edits 1 a 1 o en pares pequeños y verificar cada resultado. El display de `read_file_lines` a veces recorta/padece la indentación de la primera línea devuelta: no fiarse, leer 2-3 líneas extra.
 - **No hecho (opcional, bajo valor/riesgo):** deduplicar los `#[derive(Deserialize)]` locales de cada fn SGDB (storesearch/search/steam) en structs compartidas de módulo. Compila limpio sin warnings; es limpieza estética, no dead code. Si se hace: structs tipo `StoreSearchResp{ items: Vec<StoreItem> }`, `SgdbSearchResp{ response:{ results: Vec<SgdbResult> } }` a nivel de módulo.
 - **Archivos tocados:** `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `src-tauri/src/scanner.rs`. Cero frontend, cero config.
-- **Pendiente:** (1) commit git de esta limpieza; (2) release build para distribuir (`cargo tauri build` → NSIS/MSI en `target/release/bundle/`); (3) item viejo: verificación visual del card-pan al soltar el drag.
+- **Pendiente:** ~~(1) commit git~~ hecho (`180cdb9`); ~~(2) release build~~ hecho (ver entrada siguiente); (3) item viejo: verificación visual del card-pan al soltar el drag.
+
+## 2026-10-24 — Release build + instaladores generados
+- **Pedido:** "si hace un release buikd".
+- **tauri-cli:** no estaba instalado → `cargo install tauri-cli --locked` (v2.12.4, 1m48s, binario en `~/.cargo/bin/cargo-tauri.exe`). La config `tauri.conf.json` ya tenía todo para bundle: `identifier`, `bundle.active`, `targets: "all"`, íconos.
+- **`cargo tauri build`:** exitoso en ~2 min (descargó WIX 3.14 + NSIS 3.13 auto-gestionados por tauri-bundler). Artefactos:
+  - `src-tauri/target/release/cardynox-launcher.exe` — **11 MB**, binario suelto portable (copiar a cualquier Win10/11 con WebView2 y listo, sin instalar).
+  - `src-tauri/target/release/bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` — **2.5 MB** (comprimido LZMA; el más chico para compartir) — instalador con uninstall + shortcut.
+  - `src-tauri/target/release/bundle/msi/Cardynox Launcher_0.1.0_x64_en-US.msi` — 3.7 MB.
+- **Nota:** el binario release es 11 MB porque está todo estático (Rust+Tauri+Wry sin runtime extra); el instalador NSIS pesa menos que el exe suelto por la compresión.
+- **Archivos tocados:** solo artefactos en `target/release/` (fuera de git). Cero cambios de código.
+- **Pendiente:** (1) verificación visual del card-pan al soltar el drag (item viejo); (2) si se distribuye fuera, considerar firma del binario (Windows Smart Screen advierte con ejecutables sin firmar) y versionado semver real.
