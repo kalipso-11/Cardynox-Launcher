@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cardynox Launcher</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Regiones de arrastre de la ventana (sin marco): solo #drag-handle y #stage.
+       #app NO lleva data-tauri-drag-region a propósito: si lo tuviera, un
+       mousedown sobre <img> del Detalles (elemento no interactivo) se
+       interpretaría como arrastre de la ventana y chocaría con el paneo. -->
+  <div id="app">
+
+    <!-- Fila superior: handle de arrastre (manija) + buscador -->
+    <div class="top-row">
+      <div id="drag-handle" data-tauri-drag-region title="Arrastrar la ventana">
+        <span class="grip"></span>
+      </div>
+      <button id="btn-filter" type="button" title="Ordenar y filtrar por plataforma" aria-label="Ordenar y filtrar juegos">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+      </button>
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="Buscar juegos…" autocomplete="off" spellcheck="false" />
+        <span class="search-icon" aria-hidden="true">⌕</span>
+      </div>
+    </div>
+
+    <main id="stage" aria-label="Carrusel de juegos" data-tauri-drag-region>
+      <!-- Las tarjetas se generan desde app.js -->
+    </main>
+
+    <h2 id="active-name"></h2>
+
+    <nav class="actions">
+      <button id="btn-details"><span class="ic">ⓘ</span><span>Detalles</span></button>
+      <button id="btn-play"><span class="ic">▶</span><span>Jugar</span></button>
+      <button id="btn-add" title="Agregar un juego manualmente"><span class="ic">＋</span><span>Agregar</span></button>
+    </nav>
+
+    <footer id="status">Cargando…</footer>
+
+    <!-- Overlay de detalles: cubre todo el área del gadget -->
+    <!-- Panel de orden/filtro por plataforma (dropdown desde #btn-filter). -->
+    <div id="filter-panel" hidden>
+      <div class="fp-section">
+        <div class="fp-label">Ordenar</div>
+        <label class="fp-radio"><input type="radio" name="sortmode" value="name" /><span>Alfabético</span></label>
+        <label class="fp-radio"><input type="radio" name="sortmode" value="platform" checked /><span>Por plataforma</span></label>
+      </div>
+      <div class="fp-section">
+        <div class="fp-label">Plataformas</div>
+        <div id="fp-platforms"></div>
+      </div>
+    </div>
+
+    <div id="details-overlay" hidden>
+      <button id="btn-close-details" title="Cerrar (Esc)" aria-label="Cerrar detalles">×</button>
+      <div class="dt-layout">
+        <aside class="dt-art">
+          <img id="dt-art-img" src="" alt="Portada" draggable="false" />
+          <div id="dt-art-fallback"><span id="dt-art-initials">?</span></div>
+          <!-- Acciones de portada: sobre la imagen, al pie. -->
+          <div class="dt-art-actions">
+            <button id="dt-change-cover" title="Elegir imagen o GIF local">🖼 Cambiar portada</button>
+            <button id="dt-reset-cover" hidden>Quitar personalizada</button>
+          </div>
+          <input type="file" id="dt-cover-file" accept="image/png,image/jpeg,image/gif,image/webp,.gif" hidden />
+        </aside>
+        <section class="dt-info">
+          <h3 id="dt-title">—</h3>
+
+          <div class="dt-field" id="dt-source-field">
+            <label>Origen</label>
+            <span id="dt-source" class="dt-value">—</span>
+          </div>
+
+          <div class="dt-field">
+            <label>Nombre visible</label>
+            <div class="dt-input-row">
+              <input type="text" id="dt-name" spellcheck="false" />
+              <button id="dt-rename-btn" title="Guardar nombre">✓</button>
+            </div>
+          </div>
+
+          <!-- Caja unificada: ruta completa del juego (con .exe) + botones. -->
+          <div class="dt-field" id="dt-path-field">
+            <label>Ruta de instalación</label>
+            <code id="dt-path" class="dt-path">—</code>
+            <div class="dt-path-actions">
+              <button id="dt-open-folder" disabled>📂 Abrir carpeta</button>
+              <button id="dt-change-path" hidden>✎ Cambiar ruta de juego</button>
+            </div>
+          </div>
+
+          <!-- Argumentos de lanzamiento: solo juegos "Otros". -->
+          <div class="dt-field" id="dt-args-field" hidden>
+            <label for="dt-args">Argumentos de lanzamiento</label>
+            <div class="dt-input-row">
+              <input type="text" id="dt-args" placeholder="-windowed -res 1920x1080" autocomplete="off" spellcheck="false" />
+              <button id="dt-args-save" title="Guardar argumentos">✓</button>
+            </div>
+            <p class="dt-hint">Se pasan al .exe al ejecutarlo.</p>
+          </div>
+
+          <div class="dt-field" id="dt-size-field" hidden>
+            <label>Tamaño en disco</label>
+            <span id="dt-size" class="dt-value">—</span>
+          </div>
+
+          <div class="dt-steam" id="dt-steam-section" hidden>
+            <h4>Datos de Steam</h4>
+            <ul>
+              <li id="dt-row-ach" hidden>🏆 Logros: <strong id="dt-ach">—</strong></li>
+              <li id="dt-row-time" hidden>⏱ Tiempo: <strong id="dt-time">—</strong></li>
+              <li id="dt-row-last" hidden>🕐 Última sesión: <strong id="dt-last">—</strong></li>
+            </ul>
+          </div>
+
+          <p id="dt-no-data" class="dt-muted" hidden>Sin datos locales disponibles.</p>
+
+          <!-- Quitar del launcher (con confirmación inline). -->
+          <div id="dt-remove-area">
+            <button id="dt-remove-game" class="dt-danger-btn" title="Sacar este juego del launcher (no lo desinstala)">Quitar del launcher</button>
+            <div id="dt-remove-confirm" hidden>
+              <span id="dt-remove-confirm-text"></span>
+              <button id="dt-remove-yes" class="dt-danger-btn">Sí, quitar</button>
+              <button id="dt-remove-no" class="dt-muted-btn">Cancelar</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Overlay para AGREGAR un juego (mismo estilo glass que Detalles, pero vacío
+         y para cargar: portada, .exe y nombre visible). -->
+    <div id="add-overlay" hidden>
+      <button id="btn-close-add" title="Cerrar (Esc)" aria-label="Cerrar">×</button>
+      <div class="dt-layout">
+        <aside class="dt-art">
+          <img id="add-art-img" src="" alt="Portada" draggable="false" />
+          <div id="add-art-fallback"><span id="add-art-initials">＋</span></div>
+          <!-- Acciones de portada: sobre la imagen, al pie. -->
+          <div class="dt-art-actions">
+            <button id="add-change-cover">🖼 Elegir portada</button>
+            <button id="add-reset-cover" hidden>Quitar portada</button>
+          </div>
+          <input type="file" id="add-cover-file" accept="image/png,image/jpeg,image/gif,image/webp,.gif" hidden />
+        </aside>
+        <section class="dt-info">
+          <h3>Agregar juego</h3>
+
+          <div class="dt-field">
+            <label for="add-name">Nombre visible</label>
+            <div class="dt-input-row">
+              <input type="text" id="add-name" placeholder="Nombre del juego" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
+
+          <div class="dt-field">
+            <label>Ejecutable (.exe)</label>
+            <code id="add-path" class="dt-path">No seleccionado</code>
+            <div class="dt-path-actions">
+              <button id="add-pick-exe">📂 Elegir ejecutable del juego</button>
+            </div>
+          </div>
+
+          <p class="dt-hint">El nombre visible se completa con el nombre del ejecutable, pero podés cambiarlo.</p>
+
+          <div id="add-footer">
+            <button id="add-cancel" class="dt-cancel-btn">Cancelar</button>
+            <button id="add-confirm" class="dt-add-btn" disabled>Agregar</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

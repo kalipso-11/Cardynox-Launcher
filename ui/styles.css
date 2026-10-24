@@ -1,0 +1,998 @@
+/* ============================================================
+   Cardynox Launcher — estilos
+   Ventana transparente frameless de 530x320, look de skin
+   (ver src-tauri/tauri.conf.json: transparent + shadow false).
+   El fondo es 100% transparente: solo los "paneles" (buscador,
+   tarjetas, botones) llevan vidrio oscuro para ser legibles
+   sobre cualquier wallpaper.
+   ============================================================ */
+
+:root {
+  --accent: #7c86ff;
+  --text: #eef0ff;
+  --muted: #a9b1d8;
+  /* Factor de opacidad del gadget (0.2 a 1). JS lo modifica desde la bandeja.
+     Solo afecta fondos/bordes/sombras — NO el texto ni las imágenes de portada. */
+  --fade: 1;
+  --glass: rgba(12, 15, 32, calc(0.68 * var(--fade)));
+  --glass-border: rgba(255, 255, 255, calc(0.16 * var(--fade)));
+  --card-w: 126px;
+  --card-h: 180px; /* ratio 0.7, como el arte de Steam (600x900) */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* El atributo hidden debe ganar a cualquier display de autor
+   (p. ej. .dt-field{display:flex}, que de lo contrario impide ocultar campos). */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; overflow: hidden; background: transparent; }
+
+body {
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Solo para previsualizar ui/index.html en un browser normal (sin Tauri). */
+body.browser-preview {
+  background:
+    radial-gradient(420px 260px at 50% 60%, rgba(124, 134, 255, 0.2), transparent 70%),
+    linear-gradient(158deg, #0a0f1f, #191344);
+}
+
+#app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 12px;
+  gap: 6px;
+}
+
+/* ---------- Fila superior: manija de arrastre + buscador ---------- */
+
+.top-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+}
+
+#drag-handle {
+  order: 1;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  cursor: grab;
+}
+
+#drag-handle:active { cursor: grabbing; }
+
+/* "Manojo" de 6 puntos (2x3) dibujado con gradientes, sin fuentes. */
+#drag-handle .grip {
+  width: 8px;
+  height: 13px;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.8) 1.2px, transparent 1.6px);
+  background-size: 4px 4.33px;
+  pointer-events: none; /* el clic debe caer en #drag-handle para arrancar el drag */
+}
+
+/* ---------- Buscador ---------- */
+
+.search-wrap { order: 2; flex: none; width: 50%; min-width: 0; position: relative; }
+
+/* ---------- Icono de filtro (orden + plataformas), arriba a la derecha ---------- */
+#btn-filter {
+  order: 3;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+#btn-filter:hover { color: var(--text); background: rgba(30, 36, 70, calc(0.85 * var(--fade))); }
+#btn-filter.active { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Panel de orden/filtro (dropdown glass) ---------- */
+#filter-panel {
+  --fade: 1;
+  --glass: rgba(12, 15, 32, 0.68);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  position: absolute;
+  top: 46px;
+  right: 12px;
+  bottom: 12px;
+  width: 214px;
+  z-index: 90;
+  border-radius: 12px;
+  background: rgba(10, 13, 28, 0.94);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 3px 10px rgba(124, 134, 255, 0.26);
+  padding: 12px;
+  overflow-y: auto;
+  animation: dt-fade-in 0.16s ease;
+}
+#filter-panel .fp-section + .fp-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--glass-border); }
+#filter-panel .fp-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+#filter-panel .fp-radio,
+#filter-panel .fp-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+#filter-panel .fp-radio:hover,
+#filter-panel .fp-check:hover { background: rgba(255, 255, 255, 0.06); }
+#filter-panel .fp-radio input,
+#filter-panel .fp-check input { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+#filter-panel .fp-count { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+.search-wrap .search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-52%);
+  font-size: 13px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+#search {
+  width: 100%;
+  padding: 6px 14px 6px 30px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  outline: none;
+  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  transform: scale(1);
+  transform-origin: center;
+  transition:
+    border-color 0.22s ease,
+    background 0.22s ease,
+    box-shadow 0.3s ease,
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#search::placeholder { color: var(--muted); }
+
+#search:focus {
+  border-color: rgba(124, 134, 255, calc(0.85 * var(--fade)));
+  background: rgba(38, 46, 96, calc(0.62 * var(--fade)));
+  box-shadow:
+    0 0 0 1px rgba(124, 134, 255, calc(0.55 * var(--fade))),
+    0 0 18px 2px rgba(124, 134, 255, calc(0.45 * var(--fade)));
+  transform: scale(1.03);
+}
+
+#search::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* ---------- Escenario / carrusel ---------- */
+
+#stage {
+  position: relative;
+  flex: 1;
+  perspective: 900px;
+}
+
+.card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--card-w);
+  height: var(--card-h);
+  margin-left: calc(var(--card-w) / -2);
+  margin-top: calc(var(--card-h) / -2);
+  border-radius: 9px;
+  overflow: hidden;
+  background: #171d3a;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  transform-style: preserve-3d;
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.3s ease,
+    box-shadow 0.3s ease;
+  will-change: transform, opacity;
+}
+
+.card img.art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Capa de brillo sutil para unificar el arte */
+.card .sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 30%, rgba(0,0,0,0.28) 100%);
+  pointer-events: none;
+  opacity: var(--fade);
+}
+
+/* Fallback si el arte no carga: gradiente + iniciales */
+.card .fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #232a52, #3b2e7a);
+}
+
+.card .fallback span {
+  font-size: 34px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  letter-spacing: 1px;
+}
+
+.card.no-art .art { display: none; }
+.card.no-art .fallback { display: flex; }
+
+/* Tarjeta activa (la pone/quita JS vía clase) */
+.card.active {
+  box-shadow:
+    0 0 0 1.5px rgba(124, 134, 255, calc(0.9 * var(--fade))),
+    0 0 18px rgba(124, 134, 255, calc(0.45 * var(--fade))),
+    0 12px 28px rgba(124, 134, 255, calc(0.22 * var(--fade)));
+}
+
+/* Agrandamiento suave al pasar el mouse sobre la portada central activa.
+   --hs se multiplica contra la escala del carrusel (transform inline); el
+   cambio de la variable re-computa transform y lo anima via transition. */
+.card.active { --hs: 1; }
+.card.active:hover { --hs: 1.05; }
+
+.card:not(.active):hover { filter: brightness(1.18); }
+
+/* Etiqueta de origen al pie de la portada (Steam/Epic/…/Otros). */
+.card .card-src {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 5px;
+  padding: 1px 6px;
+  font-size: 9px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(8, 10, 22, calc(0.6 * var(--fade)));
+  border-radius: 6px;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* ---------- Nombre activo (flujo normal) ---------- */
+
+#active-name {
+  flex: none;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 8px;
+  /* Sombra dura: legible sobre cualquier wallpaper */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- Botones de acción (flujo normal) ---------- */
+
+.actions {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+
+.actions button:hover { background: rgba(30, 36, 70, calc(0.85 * var(--fade))); }
+.actions button:active { transform: scale(0.96); }
+
+.actions button .ic { font-size: 9px; color: var(--accent); transform: translateY(-1px); }
+
+/* Sube la etiqueta de texto (Detalles / Jugar / Agregar) 2px hacia arriba,
+   sin mover el icono ni el propio boton (evita pisar :active{transform}). */
+.actions button > span:not(.ic) { transform: translateY(-2px); }
+
+/* Jugar: vive en la fila inferior (.actions), en posicion central entre
+   Detalles y Agregar. Hereda el estilo .actions button (como los demas);
+   solo se destaco un poco el icono play. */
+#btn-play .ic { font-size: 11px; color: var(--accent); }
+
+.actions button:disabled { opacity: 0.4; cursor: default; }
+.actions button:disabled:hover { background: var(--glass); }
+
+/* ---------- Pie / estado ---------- */
+
+#status {
+  flex: none;
+  height: 13px;
+  text-align: center;
+  font-size: 9.5px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+#status.flash { color: var(--text); transition: none; }
+
+/* ============================================================
+   Overlay de detalles: cubre todo #app, mismo estilo glass
+   ============================================================ */
+
+#details-overlay {
+  /* Aísla el overlay del --fade global: se mantiene a opacidad completa
+     sin importar la opacidad del gadget elegida desde la bandeja. Se
+     redefinen también --glass/--glass-border porque esas se heredan ya
+     resueltas desde :root (donde --fade es el valor global). */
+  --fade: 1;
+  --glass: rgba(12, 15, 32, 0.68);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  position: absolute;
+  inset: 8px;
+  z-index: 100;
+  border-radius: 14px;
+  background: rgba(10, 13, 28, calc(0.92 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(0.06 * var(--fade))),
+    0 3px 10px rgba(124, 134, 255, calc(0.26 * var(--fade)));
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  animation: dt-fade-in 0.2s ease;
+}
+
+#details-overlay[hidden] { display: none; }
+
+@keyframes dt-fade-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Botón cerrar */
+#btn-close-details {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  z-index: 2;
+}
+
+#btn-close-details:hover {
+  background: rgba(255, 80, 80, 0.2);
+  color: #ff6b6b;
+  border-color: rgba(255, 100, 100, 0.4);
+}
+
+/* Layout interno */
+.dt-layout {
+  flex: 1;
+  display: flex;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Portada izquierda: MISMO recorte que la tarjeta del gadget (ratio 0.7 vertical).
+   IMPORTANTE: la altura debe ser DEFINITA, no aspect-ratio.
+   Chromium (WebView2) ignora aspect-ratio en flex items con height auto y deja
+   que la caja adopte el ratio NATURAL de la imagen o colapse a 0 si no hay
+   imagen. Eso causaba dos bugs: (1) Detalles mostraba "la imagen completa"
+   en vez del recorte 2:3, y (2) en Agregar, al quitar portada la caja se
+   achicaba a 0px de alto y desaparecían los botones.
+   Medido con Chromium headless: con height definitiva la caja es 150x214 en
+   todos los casos (portrait, landscape y vacía). */
+.dt-art {
+  width: 150px;
+  min-width: 150px;
+  height: calc(150px / var(--card-w) * var(--card-h)); /* =214px; ratio igual que la tarjeta. Si cambian --card-w/--card-h, esto sigue solo */
+  align-self: center;                            /* no estirar a la altura de la fila */
+  position: relative;
+  border-radius: 9px;
+  overflow: hidden;                              /* recorta el paneo de la imagen */
+  background: #171d3a;
+  flex-shrink: 0;
+}
+
+.dt-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;                             /* el paneo se hace moviendo object-position */
+  display: block;
+}
+
+/* Affordance del paneo: solo cuando la imagen recorta el marco (ratio distinto). */
+#dt-art-img { cursor: default; }
+.dt-art.can-pan #dt-art-img { cursor: grab; }
+.dt-art.panning #dt-art-img { cursor: grabbing; }
+
+#dt-art-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #232a52, #3b2e7a);
+}
+
+#dt-art-fallback span {
+  font-size: 40px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+}
+
+#dt-art-fallback.hidden { display: none; }
+
+/* Acciones de portada sobre la imagen (al pie) */
+.dt-art-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 6px 7px;
+  background: linear-gradient(to top, rgba(6, 8, 18, 0.94) 0%, rgba(6, 8, 18, 0.55) 55%, rgba(6, 8, 18, 0) 100%);
+  z-index: 3;
+}
+
+/* Info derecha */
+.dt-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.dt-info::-webkit-scrollbar { width: 4px; }
+.dt-info::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+#dt-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* Campos */
+.dt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dt-field label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.dt-input-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.dt-input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  font-family: inherit;
+  color: var(--text);
+  background: rgba(255, 255, 255, calc(0.06 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.dt-input-row input:focus {
+  border-color: rgba(124, 134, 255, calc(0.7 * var(--fade)));
+}
+
+#dt-rename-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, calc(0.06 * var(--fade)));
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+#dt-rename-btn:hover {
+  border-color: rgba(124, 134, 255, 0.6);
+  color: var(--accent);
+}
+
+#dt-rename-btn.saved {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+/* Ruta */
+.dt-path {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 10px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, calc(0.04 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  word-break: break-all;
+  line-height: 1.4;
+  display: block;
+}
+
+/* Botones de la caja unificada de ruta (abrir / cambiar) */
+.dt-path-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Botón de elegir el ejecutable del overlay “Agregar”: acción destacada,
+   look premium con gradiente accent, glow suave y lift al pasar el mouse. */
+#add-pick-exe {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(124, 134, 255, 0.92) 0%, rgba(86, 98, 232, 0.92) 100%);
+  border: 1px solid rgba(160, 168, 255, 0.6);
+  border-radius: 9px;
+  box-shadow:
+    0 2px 12px rgba(90, 100, 240, calc(0.35 * var(--fade))),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+#add-pick-exe:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow:
+    0 5px 18px rgba(90, 100, 240, calc(0.5 * var(--fade))),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+#add-pick-exe:active {
+  transform: translateY(0);
+  filter: brightness(0.97);
+}
+
+#dt-open-folder,
+#dt-change-path {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-family: inherit;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, calc(0.06 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+#dt-open-folder:hover:not(:disabled),
+#dt-change-path:hover {
+  background: rgba(124, 134, 255, calc(0.2 * var(--fade)));
+  border-color: rgba(124, 134, 255, calc(0.5 * var(--fade)));
+}
+
+#dt-open-folder:disabled { opacity: 0.35; cursor: default; }
+
+#dt-change-path.saved {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+/* Botones de portada (viven sobre la imagen, apilados al pie) */
+#dt-change-cover,
+#dt-reset-cover {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 9.5px;
+  font-family: inherit;
+  background: rgba(255, 255, 255, calc(0.06 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+#dt-change-cover:hover {
+  background: rgba(124, 134, 255, calc(0.2 * var(--fade)));
+  border-color: rgba(124, 134, 255, calc(0.5 * var(--fade)));
+}
+
+#dt-reset-cover {
+  color: #f87171;
+}
+
+#dt-reset-cover:hover {
+  background: rgba(248, 113, 113, calc(0.15 * var(--fade)));
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+/* Valor */
+.dt-value {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Sección Steam */
+.dt-steam {
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, calc(0.15 * var(--fade)));
+}
+
+.dt-steam h4 {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.dt-steam ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dt-steam li {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dt-steam li strong {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.dt-muted {
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Hint bajo el campo de argumentos */
+.dt-hint {
+  margin: 0;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* Botón guardar argumentos (idéntico al de renombrar) */
+#dt-args-save {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, calc(0.06 * var(--fade)));
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+#dt-args-save:hover {
+  border-color: rgba(124, 134, 255, 0.6);
+  color: var(--accent);
+}
+
+#dt-args-save.saved {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+/* Quitar del launcher (peligro) + confirmación inline */
+#dt-remove-area {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.dt-danger-btn {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  background: rgba(248, 113, 113, calc(0.08 * var(--fade)));
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 6px;
+  color: #f87171;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dt-danger-btn:hover {
+  background: rgba(248, 113, 113, calc(0.2 * var(--fade)));
+  border-color: rgba(248, 113, 113, 0.65);
+}
+
+.dt-muted-btn {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  background: rgba(255, 255, 255, calc(0.05 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dt-muted-btn:hover {
+  background: rgba(255, 255, 255, calc(0.12 * var(--fade)));
+}
+
+#dt-remove-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+#dt-remove-confirm span {
+  flex: 1 1 100%;
+  font-size: 10.5px;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+#dt-remove-yes.dt-danger-btn {
+  width: auto;
+  flex: 1;
+}
+
+#dt-remove-no {
+  flex: 1;
+}
+
+/* ============================================================
+   Overlay “Agregar juego” (manual): reutiliza las clases .dt-* del
+   overlay de detalles. Aquí se enlazan solo los IDs propios (add-*)
+   y los botones nuevos (pie Agregar/Cancelar).
+   ============================================================ */
+
+#add-overlay {
+  --fade: 1;
+  --glass-border: rgba(255, 255, 255, 0.16);
+  position: absolute;
+  inset: 8px;
+  z-index: 100;
+  border-radius: 14px;
+  background: rgba(10, 13, 28, calc(0.92 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(0.06 * var(--fade))),
+    0 3px 10px rgba(124, 134, 255, calc(0.26 * var(--fade)));
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  animation: dt-fade-in 0.2s ease;
+}
+
+#add-overlay[hidden] { display: none; }
+
+/* Botón cerrar (idéntico al del overlay de detalles) */
+#btn-close-add {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  z-index: 2;
+}
+
+#btn-close-add:hover {
+  background: rgba(255, 80, 80, 0.2);
+  color: #ff6b6b;
+  border-color: rgba(255, 100, 100, 0.4);
+}
+
+/* Fallback de portada (idéntico al de detalles) */
+#add-art-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #232a52, #3b2e7a);
+}
+
+#add-art-fallback span {
+  font-size: 40px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+}
+
+#add-art-fallback.hidden { display: none; }
+
+/* Botones de portada sobre la imagen (idénticos a los de detalles) */
+#add-change-cover,
+#add-reset-cover {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 9.5px;
+  font-family: inherit;
+  background: rgba(255, 255, 255, calc(0.06 * var(--fade)));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+#add-change-cover:hover {
+  background: rgba(124, 134, 255, calc(0.2 * var(--fade)));
+  border-color: rgba(124, 134, 255, calc(0.5 * var(--fade)));
+}
+
+#add-reset-cover {
+  color: #f87171;
+}
+
+#add-reset-cover:hover {
+  background: rgba(248, 113, 113, calc(0.15 * var(--fade)));
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+/* Pie del overlay: Cancelar (rojo) a la izquierda, Agregar (verde) a la derecha. */
+#add-footer {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.dt-cancel-btn,
+.dt-add-btn {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.dt-cancel-btn {
+  background: rgba(248, 113, 113, calc(0.08 * var(--fade)));
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  color: #f87171;
+}
+
+.dt-cancel-btn:hover {
+  background: rgba(248, 113, 113, calc(0.2 * var(--fade)));
+  border-color: rgba(248, 113, 113, 0.65);
+}
+
+.dt-add-btn {
+  font-weight: 700;
+  background: rgba(74, 222, 128, calc(0.16 * var(--fade)));
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  color: #4ade80;
+}
+
+.dt-add-btn:hover:not(:disabled) {
+  background: rgba(74, 222, 128, calc(0.28 * var(--fade)));
+  border-color: rgba(74, 222, 128, 0.8);
+}
+
+.dt-add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

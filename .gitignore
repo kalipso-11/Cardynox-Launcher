@@ -1,0 +1,14 @@
+# Artifacts de build (Rust/cargo + Tauri) — no versionar
+**/target/
+
+# Si se agrega bundler/node en el futuro
+node_modules/
+dist/
+
+# Ruido del sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Logs de build/ejecución
+*.log

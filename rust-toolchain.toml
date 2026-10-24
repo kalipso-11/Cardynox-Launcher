@@ -1,0 +1,5 @@
+# Tauri en Windows necesita el linker de MSVC (Visual Studio Build Tools).
+# El toolchain global de la máquina es `-gnu` (MinGW), que en esta máquina
+# falla al linkear; por eso se fuerza MSVC solo para este proyecto.
+[toolchain]
+channel = "stable-x86_64-pc-windows-msvc"

@@ -1,0 +1,24 @@
+[package]
+name = "cardynox-launcher"
+version = "0.1.0"
+description = "Cardynox Launcher — launcher minimalista de juegos, estilo skin de Rainmeter"
+edition = "2021"
+
+# El sufijo `_lib` evita la colisión de nombres de salida (bin vs lib)
+# que cargo reporta en builds debug de MSVC.
+[lib]
+name = "cardynox_launcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+winreg = "0.56"
+# Cliente HTTP asíncrono (tier storesearch de Steam + SGDB opcional).
+# default-tls → SChannel en Windows: sin OpenSSL ni compilador C extra.
+reqwest = { version = "0.12", default-features = false, features = ["json", "default-tls"] }

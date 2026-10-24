@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SteamGridDB · Cardynox</title>
+  <link rel="stylesheet" href="sgdb.css" />
+</head>
+<body>
+  <div id="sgdb">
+    <header class="sgdb-head">
+      <h1>SteamGridDB</h1>
+      <p class="sub">Configuración de carátulas automáticas</p>
+    </header>
+
+    <section class="card">
+      <h2>¿Para qué sirve?</h2>
+      <p>
+        SteamGridDB es una base de datos comunitaria de carátulas y arte de juegos.
+        En Cardynox funciona como fuente <strong>secundaria</strong>: cuando un juego
+        <em>no</em> está en tu biblioteca de Steam y el buscador del store (que no
+        requiere key) tampoco lo encuentra, SGDB busca su portada vertical para
+        mostrarla en la tarjeta.
+      </p>
+      <p class="muted">
+        Es opcional. Los juegos de Steam ya traen su portada; SGDB solo completa
+        las que les faltan a los demás.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Cómo crear tu key</h2>
+      <ol>
+        <li>
+          Creá una cuenta gratuita en
+          <a data-external href="https://www.steamgriddb.com">steamgriddb.com</a>.
+        </li>
+        <li>
+          Después de crear la cuenta, entrá a
+          <a data-external href="https://www.steamgriddb.com/profile/preferences/api">/profile/preferences/api</a>
+          para generar y ver tu API key.
+        </li>
+        <li>Copiala y pegala abajo.</li>
+      </ol>
+      <p class="muted">
+        Límite del plan gratuito: ~500 peticiones por hora. El launcher hace muy
+        pocas consultas y guarda caché local, así que sobra holgura. La key se
+        guarda <strong>solo</strong> en tu equipo (carpeta de configuración) y nunca se distribuye.
+      </p>
+    </section>
+
+    <section class="card">
+      <div id="status" class="status off">SGDB desactivado</div>
+      <label for="key-input">API key</label>
+      <div class="input-row">
+        <input
+          type="password"
+          id="key-input"
+          spellcheck="false"
+          placeholder="Pegá tu API key de SteamGridDB"
+          autocomplete="off"
+        />
+        <button id="toggle-vis" title="Mostrar / ocultar">👁</button>
+      </div>
+      <div class="btn-row">
+        <button id="btn-save" class="primary">Guardar y activar</button>
+        <button id="btn-test" class="ghost">Probar</button>
+        <button id="btn-disable" class="ghost">Desactivar</button>
+      </div>
+      <p id="result" class="result" role="status"></p>
+    </section>
+  </div>
+
+  <script src="sgdb.js"></script>
+</body>
+</html>
