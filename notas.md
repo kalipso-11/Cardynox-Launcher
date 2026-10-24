@@ -740,3 +740,15 @@
 - **Verificacion:** node --check OK; touch lib.rs; taskkill PID 19000; build limpia 20.6s 0 warnings; relanzada vía schtasks → PID 9112.
 - **Archivos tocados:** `ui/app.js` (persistDetailsPan: +3 líneas).
 - **Pendiente (verif. visual del usuario):** mover la portada de Superposition en Detalles y soltar → la tarjeta debe cambiar el recorte INMEDIATAMENTE (antes de cerrar). Si sigue sin cambiar, pedir: (a) ¿cambia al navegar con la rueda? (eso dirime si es trigger o si applyCardPan no está en el binario); (b) abrir devtools/consola del WebView para ver warns.
+
+## 2026-10-24 — Git interno + build final, entrega del exe al usuario
+- **Pedido:** "arma un git interno si es que no esta creado y compila el programa y avisame donde esta el exe para ejecutarlo".
+- **Git:** no existía repo → `git init` en la raíz (`D:\IA\Proyectos\CardynoxLauncher`). Identidad global ya estaba (Kalipso / bloody.demon11@gmail.com) → los commits llevan firma del usuario.
+- **Limpieza previa al commit:** `git add -A` falló con `error: open("src-tauri/nul"): No such file or directory` — había un archivo basura llamado literalmente `nul` en src-tauri (nombre reservado de Windows; subproducto de algún redirect `> nul` de una sesión anterior, 59 bytes) + `console.log` viejo (40 bytes). Se borraron ambos (`rm -f`) y se sumó `*.log` al .gitignore. Lección: si git falla con `nul`/`con`/`prn` en Windows, es archivo basura de redirect, no el device.
+- **.gitignore creado (raíz):** `**/target/`, `node_modules/`, `dist/`, ruido OS (Thumbs.db/desktop.ini/.DS_Store), `*.log`. Resultado: 26 archivos versionados, target/ fuera.
+- **Commit inicial:** `731ff43` (master/root-commit) — "CardynoxLauncher v0.1 — gadget launcher completo" con resumen de features en el mensaje. Post-commit: `git status` limpio.
+- **Build:** la instancia que corría (PID 9112) YA NO estaba corriendo al momento de compilar (el usuario la había cerrado) → nada bloqueaba el binario. `cargo build` = "Finished in 0.24s" (up-to-date: no cambió ninguna fuente desde el build de 01:25, así que el exe ya traía todos los fixes incluyendo card-pan al soltar). No se forzó rebuild innecesario.
+- **EXE entregado:** `D:\IA\Proyectos\CardynoxLauncher\src-tauri\target\debug\cardynox-launcher.exe` (16.4 MB, build DEBUG — binario + WebView2; para distribuir después conviene `tauri build` release/MSI, no pedido todavía).
+- **Estado final:** app NO corriendo a propósito → el usuario la ejecuta él mismo desde la ruta de arriba. La tarea programada `Cardynox_Launch` sigue existiendo (schtasks) por si algún día se necesita relanzar desde harness.
+- **Archivos tocados:** `.gitignore` (nuevo), borrados `src-tauri/nul` + `src-tauri/console.log`, repo git inicializado. Cero código.
+- **Pendiente:** (1) confirmar el fix de card-pan al soltar el drag (item de la entrada anterior, aún sin verificación visual del usuario); (2) si quiere distribuir: release build + instalador; (3) backups/remote del repo git si lo quisiera respaldar (hoy es 100% local).
