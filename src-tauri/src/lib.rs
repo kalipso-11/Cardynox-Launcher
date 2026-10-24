@@ -67,17 +67,13 @@ fn list_games(app: tauri::AppHandle) -> Vec<Game> {
     // 1) Steam.
     let mut games = steam::scan();
     if games.is_empty() {
-        eprintln!("[cardynox] No se detectó librería de Steam; usando juegos demo.");
         games = steam::demo_games();
-    } else {
-        eprintln!("[cardynox] Steam: {} juegos.", games.len());
     }
 
     // 2) Launchers específicos (Epic, GOG, EA, Ubisoft, Battle.net, Rockstar,
     //    Amazon, itch, Heroic, Xbox, carpetas Games).
     let ext_games = scanner::scan_all_external();
     if !ext_games.is_empty() {
-        eprintln!("[cardynox] Launchers: {} juegos adicionales.", ext_games.len());
         games.extend(ext_games);
     }
 
@@ -85,7 +81,6 @@ fn list_games(app: tauri::AppHandle) -> Vec<Game> {
     if !cfg.scan_roots.is_empty() {
         let dir_games = scanner::scan_directories(&cfg.scan_roots);
         if !dir_games.is_empty() {
-            eprintln!("[cardynox] Directorios: {} juegos.", dir_games.len());
             games.extend(dir_games);
         }
     }
@@ -163,7 +158,6 @@ fn list_games(app: tauri::AppHandle) -> Vec<Game> {
         games.retain(|g| !blocked.contains(g.id.as_str()));
     }
 
-    eprintln!("[cardynox] Total: {} juegos en el carrusel.", games.len());
     games
 }
 
@@ -199,17 +193,6 @@ fn launch_game(app_id: Option<String>, name: String, launch_path: Option<String>
     Err(format!("\"{name}\": sin método de lanzamiento configurado."))
 }
 
-/// Minimiza la ventana principal.
-#[tauri::command]
-fn win_minimize(window: WebviewWindow) {
-    let _ = window.minimize();
-}
-
-/// Oculta la ventana (el programa sigue vivo en la bandeja del sistema).
-#[tauri::command]
-fn win_hide(window: WebviewWindow) {
-    let _ = window.hide();
-}
 
 // ---------------------------------------------------------------------------
 // Ventana de detalles
@@ -331,8 +314,6 @@ fn add_game(name: String, exe: String, app: tauri::AppHandle) -> Result<Game, St
         });
     }
     save_config(&app, &cfg);
-    eprintln!("[cardynox] Manual: +{} ({} agregados).", name, cfg.manual_games.len());
-
     Ok(Game {
         id,
         name,
@@ -355,7 +336,6 @@ fn remove_game(id: String, app: tauri::AppHandle) -> Result<(), String> {
     if !cfg.blocked_games.contains(&id) {
         cfg.blocked_games.push(id.clone());
         save_config(&app, &cfg);
-        eprintln!("[cardynox] Blocklist: +{id} ({} ocultos).", cfg.blocked_games.len());
     }
     Ok(())
 }
@@ -426,10 +406,6 @@ fn set_sgdb_key(key: String, app: tauri::AppHandle) -> Result<(), String> {
     let mut cfg = load_config(&app);
     cfg.sgdb_key = if k.is_empty() { None } else { Some(k.clone()) };
     save_config(&app, &cfg);
-    eprintln!(
-        "[cardynox] SGDB {}.",
-        if k.is_empty() { "desactivado" } else { "activado (key guardada localmente)" }
-    );
     // El gadget escucha y re-dispara resolve_covers solo para lo que aún falta.
     let _ = app.emit("cardynox:sgdb-changed", ());
     Ok(())
@@ -849,7 +825,6 @@ async fn store_search_appid(client: &reqwest::Client, name: &str) -> Option<Stri
         .await
         .ok()?;
     if !resp.status().is_success() {
-        eprintln!("[cardynox] storesearch \"{name}\": HTTP {}.", resp.status());
         return None;
     }
     #[derive(Deserialize)]
@@ -878,10 +853,6 @@ async fn store_search_appid(client: &reqwest::Client, name: &str) -> Option<Stri
     if cover_name_ok(name, &top.name) {
         Some(top.id.clone())
     } else {
-        eprintln!(
-            "[cardynox] storesearch \"{name}\": top \"{}\" descartado (no coincide).",
-            top.name
-        );
         None
     }
 }
@@ -901,7 +872,6 @@ async fn sgdb_cover_url(client: &reqwest::Client, key: &str, name: &str) -> Opti
         .await
         .ok()?;
     if !resp.status().is_success() {
-        eprintln!("[cardynox] sgdb search \"{name}\": HTTP {}.", resp.status());
         return None;
     }
     #[derive(Deserialize)]
@@ -997,7 +967,6 @@ async fn sgdb_cover_by_steam_appid(
         .await
         .ok()?;
     if !resp.status().is_success() {
-        eprintln!("[cardynox] sgdb steam/{app_id}: HTTP {}.", resp.status());
         return None;
     }
     #[derive(Deserialize)]
@@ -1091,7 +1060,6 @@ async fn resolve_covers(
 
     if resolved_count > 0 {
         save_config(&app, &cfg);
-        eprintln!("[cardynox] resolve_covers: {resolved_count} portadas nuevas resueltas.");
     }
 
     // Mapa completo para los ids solicitados (caché + nuevos).
@@ -1245,7 +1213,6 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             let state = app.state::<MenuState>();
             match event.id.as_ref() {
                 "quit" => {
-                    eprintln!("[cardynox] Cerrando desde la bandeja.");
                     app.exit(0);
                 }
                 id if id.starts_with("op-") => {
@@ -1267,7 +1234,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                         eprintln!("[cardynox] No se pudo abrir la ventana de SGDB: {e}");
                     }
                 }
-                other => eprintln!("[cardynox] Ítem de menú sin manejar: {other:?}"),
+                _ => {}
             }
         })
         .on_tray_icon_event(|tray, event| {
@@ -1316,8 +1283,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_games,
             launch_game,
-            win_minimize,
-            win_hide,
             get_gadget_config,
             get_sgdb_key,
             set_sgdb_key,

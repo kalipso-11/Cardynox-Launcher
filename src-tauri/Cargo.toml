@@ -4,11 +4,11 @@ version = "0.1.0"
 description = "Cardynox Launcher — launcher minimalista de juegos, estilo skin de Rainmeter"
 edition = "2021"
 
-# El sufijo `_lib` evita la colisión de nombres de salida (bin vs lib)
-# que cargo reporta en builds debug de MSVC.
+# El nombre `_lib` evita la colisión de nombres de salida (bin vs lib)
+# que cargo reporta en builds debug de MSVC. Solo rlib (default): staticlib/
+# cdylib son para móvil y en desktop solo inflan target/ ~1 GB.
 [lib]
 name = "cardynox_launcher_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

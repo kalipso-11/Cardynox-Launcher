@@ -30,16 +30,6 @@ pub fn scan_all_external() -> Vec<Game> {
     games.extend(scan_xbox());
     games.extend(scan_game_folders());
 
-    // Log de resumen.
-    let mut counts: std::collections::HashMap<&str, usize> = Default::default();
-    for g in &games {
-        *counts.entry(g.source.as_str()).or_insert(0) += 1;
-    }
-    if !counts.is_empty() {
-        let parts: Vec<String> = counts.iter().map(|(k, v)| format!("{v} {k}")).collect();
-        eprintln!("[cardynox] Launchers: {} ({})", games.len(), parts.join(", "));
-    }
-
     // Deduplicar por exe path (lowercase).
     dedup_by_exe(&mut games);
 
@@ -682,7 +672,6 @@ pub fn scan_directories(roots: &[String]) -> Vec<Game> {
     for root in roots {
         let root_path = Path::new(root);
         if !root_path.is_dir() {
-            eprintln!("[cardynox] scan_directories: no existe {root}");
             continue;
         }
 
