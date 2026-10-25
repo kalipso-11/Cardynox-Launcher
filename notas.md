@@ -777,3 +777,21 @@
 - **Nota:** el binario release es 11 MB porque está todo estático (Rust+Tauri+Wry sin runtime extra); el instalador NSIS pesa menos que el exe suelto por la compresión.
 - **Archivos tocados:** solo artefactos en `target/release/` (fuera de git). Cero cambios de código.
 - **Pendiente:** (1) verificación visual del card-pan al soltar el drag (item viejo); (2) si se distribuye fuera, considerar firma del binario (Windows Smart Screen advierte con ejecutables sin firmar) y versionado semver real.
+
+## 2026-10-24 — Consulta huella RAM: árbol de procesos medido en vivo
+- **Pregunta:** "en ram ocupa 10mb, eso es todo? hay algún otro proceso que acompañe?".
+- **Medición en vivo** (script PS vía Win32_Process filtrando CommandLine por 'cardynox', la instancia abierta del usuario): launcher PID 11184 = 40.7 MB + 6 hijos `msedgewebview2.exe` (broker 123.8, renderer 70.5, gpu 81.4, utility 42.5+19.6, crashpad 13.8) → **total ≈ 392 MB**. En Task Manager los hijos aparecen como "Microsoft Edge WebView2" (separados del launcher).
+- **Arquitectura:** el .exe es solo el host Rust (ventana/tray/commands/scanner); la UI vive en WebView2 (Chromium) que spawnea su árbol propio por user-data-dir de la app. Todos los hijos mueren al cerrar el launcher — cero daemons/servicios persistentes, nada queda corriendo con la app cerrada.
+- **Contexto:** ~392 MB es el floor fijo de Chromium (broker+GPU+renderer+utility), no es nuestra UI (que trivializa el costo). Rango típico Tauri: 150-400 MB. Si la RAM fuera prioridad absoluta, la alternativa real sería egui/eframe puro Rust (30-60 MB, 1 proceso) a cambio de perder el polish CSS/animaciones del diseño actual.
+- Script de medición guardado en scratchpad (`webview.ps1`) por si se quiere re-ejecutar.
+- **Pendiente:** ninguno nuevo. Cero cambios de código.
+
+## 2026-10-25 — Bandeja: submenú "Color" (10 acentos) con cambio en vivo + persistencia
+- **Pedido del usuario:** opción en el menú de la bandeja para cambiar el color del gadget: violeta (el actual), rojo, verde, azul, blanco, gris, naranja + otros hasta 10.
+- **Paleta (10):** violeta (default, `#7c86ff` exacto original), rojo, verde, azul, blanco, gris, naranja, amarillo, cian, rosa. Tonos tipo Tailwind 400-series para legibilidad sobre vidrio oscuro. Decisiones de matiz son del arquitecto, no pedidas explícitamente — si el usuario quiere otros, se edita solo el mapa `ACCENTS` en JS.
+- **Mecánica:** todo el look deriva de UNA variable CSS, `--accent-rgb` (triple RGB) en `:root`. Antes era `--accent: #7c86ff` hardcodeado; ahora `--accent: rgb(var(--accent-rgb))` + todos los alphas (`rgba(124,134,255,…)` ×30, derivados `86,98,232`/`90,100,240`/`160,168,255` del gradiente/borde/sombra del botón Jugar, y el fondo focus) → `rgba(var(--accent-rgb), …)`. Verificado: único hardcode restante es la definición en `:root`. Cambio de color = 1 `setProperty('--accent-rgb')`; nada más se toca.
+- **Backend** (`src-tauri/src/lib.rs`): `const ACCENT_NAMES: [&str; 10]` tras `SIZES`; `GadgetConfig.accent: String` con `#[serde(default)]` (configs viejas sin campo → "" → sanitizado a "violeta") + en `Default::default()`; `MenuState.accent: Vec<CheckMenuItem<Wry>>`; `apply_accent(app, state, idx)` guarda config + emite evento `cardynox:set-accent` con el nombre (String) + actualiza checkmarks — espejo exacto de `apply_opacity`. Bandeja: items `acc-{i}` en submenú **"Color"** insertado entre Tamaño y "Activar SGDB"; brazo del handler `id.starts_with("acc-")` → `id[4..].parse()`.
+- **Frontend** (`ui/app.js`): `const ACCENTS` (nombre → triple RGB) + `applyAccent(name)` (setea SOLO `--accent-rgb`). En `initGadgetConfig()`: aplica `cfg.accent` al arrancar + `tauri.event.listen("cardynox:set-accent", …)`.
+- **Verificación:** build debug limpio. App relanzada y corriendo (PID 27860 al cierre de esta entrada).
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/styles.css` (~30 reemplazos de hardcode violeta → var), `ui/app.js`.
+- **Pendiente:** (1) verificación visual del usuario: submenú "Color" con check en el activo, cambio en vivo (bordes/sombras/glows/botón Jugar/checkboxs), persistencia tras reinicio; (2) item viejo: verificación visual del card-pan al soltar el drag; (3) el release de 2026-10-24 quedó **stale** (no trae esta feature) — re-build si se quiere distribuir ya.

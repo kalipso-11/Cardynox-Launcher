@@ -8,7 +8,10 @@
    ============================================================ */
 
 :root {
-  --accent: #7c86ff;
+  /* Acento como tripleta RGB: JS lo sobreescribe desde la bandeja (10
+     colores). Todo deriva de aquí: --accent, bordes, sombras, glows. */
+  --accent-rgb: 124, 134, 255;
+  --accent: rgb(var(--accent-rgb));
   --text: #eef0ff;
   --muted: #a9b1d8;
   /* Factor de opacidad del gadget (0.2 a 1). JS lo modifica desde la bandeja.
@@ -38,7 +41,7 @@ body {
 /* Solo para previsualizar ui/index.html en un browser normal (sin Tauri). */
 body.browser-preview {
   background:
-    radial-gradient(420px 260px at 50% 60%, rgba(124, 134, 255, 0.2), transparent 70%),
+    radial-gradient(420px 260px at 50% 60%, rgba(var(--accent-rgb), 0.2), transparent 70%),
     linear-gradient(158deg, #0a0f1f, #191344);
 }
 
@@ -73,7 +76,7 @@ body.browser-preview {
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: 999px;
-  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  box-shadow: 0 3px 10px rgba(var(--accent-rgb), calc(0.3 * var(--fade)));
   cursor: grab;
 }
 
@@ -106,7 +109,7 @@ body.browser-preview {
   border-radius: 999px;
   color: var(--muted);
   cursor: pointer;
-  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  box-shadow: 0 3px 10px rgba(var(--accent-rgb), calc(0.3 * var(--fade)));
   transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 #btn-filter:hover { color: var(--text); background: rgba(30, 36, 70, calc(0.85 * var(--fade))); }
@@ -128,7 +131,7 @@ body.browser-preview {
   border: 1px solid var(--glass-border);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 3px 10px rgba(124, 134, 255, 0.26);
+    0 3px 10px rgba(var(--accent-rgb), 0.26);
   padding: 12px;
   overflow-y: auto;
   animation: dt-fade-in 0.16s ease;
@@ -176,7 +179,7 @@ body.browser-preview {
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   outline: none;
-  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  box-shadow: 0 3px 10px rgba(var(--accent-rgb), calc(0.3 * var(--fade)));
   transform: scale(1);
   transform-origin: center;
   transition:
@@ -189,11 +192,11 @@ body.browser-preview {
 #search::placeholder { color: var(--muted); }
 
 #search:focus {
-  border-color: rgba(124, 134, 255, calc(0.85 * var(--fade)));
-  background: rgba(38, 46, 96, calc(0.62 * var(--fade)));
+  border-color: rgba(var(--accent-rgb), calc(0.85 * var(--fade)));
+  background: rgba(var(--accent-rgb), calc(0.22 * var(--fade)));
   box-shadow:
-    0 0 0 1px rgba(124, 134, 255, calc(0.55 * var(--fade))),
-    0 0 18px 2px rgba(124, 134, 255, calc(0.45 * var(--fade)));
+    0 0 0 1px rgba(var(--accent-rgb), calc(0.55 * var(--fade))),
+    0 0 18px 2px rgba(var(--accent-rgb), calc(0.45 * var(--fade)));
   transform: scale(1.03);
 }
 
@@ -219,7 +222,7 @@ body.browser-preview {
   overflow: hidden;
   background: #171d3a;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  box-shadow: 0 10px 24px rgba(var(--accent-rgb), calc(0.3 * var(--fade)));
   transform-style: preserve-3d;
   transition:
     transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
@@ -267,9 +270,9 @@ body.browser-preview {
 /* Tarjeta activa (la pone/quita JS vía clase) */
 .card.active {
   box-shadow:
-    0 0 0 1.5px rgba(124, 134, 255, calc(0.9 * var(--fade))),
-    0 0 18px rgba(124, 134, 255, calc(0.45 * var(--fade))),
-    0 12px 28px rgba(124, 134, 255, calc(0.22 * var(--fade)));
+    0 0 0 1.5px rgba(var(--accent-rgb), calc(0.9 * var(--fade))),
+    0 0 18px rgba(var(--accent-rgb), calc(0.45 * var(--fade))),
+    0 12px 28px rgba(var(--accent-rgb), calc(0.22 * var(--fade)));
 }
 
 /* Agrandamiento suave al pasar el mouse sobre la portada central activa.
@@ -337,7 +340,7 @@ body.browser-preview {
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 3px 10px rgba(124, 134, 255, calc(0.3 * var(--fade)));
+  box-shadow: 0 3px 10px rgba(var(--accent-rgb), calc(0.3 * var(--fade)));
   transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
 }
 
@@ -392,7 +395,7 @@ body.browser-preview {
   border: 1px solid var(--glass-border);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, calc(0.06 * var(--fade))),
-    0 3px 10px rgba(124, 134, 255, calc(0.26 * var(--fade)));
+    0 3px 10px rgba(var(--accent-rgb), calc(0.26 * var(--fade)));
   display: flex;
   flex-direction: column;
   padding: 14px;
@@ -564,7 +567,7 @@ body.browser-preview {
 }
 
 .dt-input-row input:focus {
-  border-color: rgba(124, 134, 255, calc(0.7 * var(--fade)));
+  border-color: rgba(var(--accent-rgb), calc(0.7 * var(--fade)));
 }
 
 #dt-rename-btn {
@@ -581,7 +584,7 @@ body.browser-preview {
 }
 
 #dt-rename-btn:hover {
-  border-color: rgba(124, 134, 255, 0.6);
+  border-color: rgba(var(--accent-rgb), 0.6);
   color: var(--accent);
 }
 
@@ -622,11 +625,11 @@ body.browser-preview {
   white-space: nowrap;
   text-align: center;
   color: #fff;
-  background: linear-gradient(135deg, rgba(124, 134, 255, 0.92) 0%, rgba(86, 98, 232, 0.92) 100%);
-  border: 1px solid rgba(160, 168, 255, 0.6);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.92) 0%, rgba(var(--accent-rgb), 0.92) 100%);
+  border: 1px solid rgba(var(--accent-rgb), 0.6);
   border-radius: 9px;
   box-shadow:
-    0 2px 12px rgba(90, 100, 240, calc(0.35 * var(--fade))),
+    0 2px 12px rgba(var(--accent-rgb), calc(0.35 * var(--fade))),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
@@ -636,7 +639,7 @@ body.browser-preview {
   filter: brightness(1.08);
   transform: translateY(-1px);
   box-shadow:
-    0 5px 18px rgba(90, 100, 240, calc(0.5 * var(--fade))),
+    0 5px 18px rgba(var(--accent-rgb), calc(0.5 * var(--fade))),
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
@@ -663,8 +666,8 @@ body.browser-preview {
 
 #dt-open-folder:hover:not(:disabled),
 #dt-change-path:hover {
-  background: rgba(124, 134, 255, calc(0.2 * var(--fade)));
-  border-color: rgba(124, 134, 255, calc(0.5 * var(--fade)));
+  background: rgba(var(--accent-rgb), calc(0.2 * var(--fade)));
+  border-color: rgba(var(--accent-rgb), calc(0.5 * var(--fade)));
 }
 
 #dt-open-folder:disabled { opacity: 0.35; cursor: default; }
@@ -690,8 +693,8 @@ body.browser-preview {
 }
 
 #dt-change-cover:hover {
-  background: rgba(124, 134, 255, calc(0.2 * var(--fade)));
-  border-color: rgba(124, 134, 255, calc(0.5 * var(--fade)));
+  background: rgba(var(--accent-rgb), calc(0.2 * var(--fade)));
+  border-color: rgba(var(--accent-rgb), calc(0.5 * var(--fade)));
 }
 
 #dt-reset-cover {
@@ -773,7 +776,7 @@ body.browser-preview {
 }
 
 #dt-args-save:hover {
-  border-color: rgba(124, 134, 255, 0.6);
+  border-color: rgba(var(--accent-rgb), 0.6);
   color: var(--accent);
 }
 
@@ -864,7 +867,7 @@ body.browser-preview {
   border: 1px solid var(--glass-border);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, calc(0.06 * var(--fade))),
-    0 3px 10px rgba(124, 134, 255, calc(0.26 * var(--fade)));
+    0 3px 10px rgba(var(--accent-rgb), calc(0.26 * var(--fade)));
   display: flex;
   flex-direction: column;
   padding: 14px;
@@ -935,8 +938,8 @@ body.browser-preview {
 }
 
 #add-change-cover:hover {
-  background: rgba(124, 134, 255, calc(0.2 * var(--fade)));
-  border-color: rgba(124, 134, 255, calc(0.5 * var(--fade)));
+  background: rgba(var(--accent-rgb), calc(0.2 * var(--fade)));
+  border-color: rgba(var(--accent-rgb), calc(0.5 * var(--fade)));
 }
 
 #add-reset-cover {

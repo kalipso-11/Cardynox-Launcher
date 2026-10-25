@@ -632,6 +632,13 @@ const SIZES: [(f64, f64); 5] = [
     (810.0, 483.0),
 ];
 
+/// Colores de acento del gadget (índice 0 = violeta, el default). El frontend
+/// lleva la triple RGB de cada uno; Rust solo persiste el nombre.
+const ACCENT_NAMES: [&str; 10] = [
+    "violeta", "rojo", "verde", "azul", "blanco",
+    "gris", "naranja", "amarillo", "cian", "rosa",
+];
+
 /// Posición custom de la portada en el overlay Detalles (paneo por arrastre):
 /// clave del juego → offset NORMALIZADO (0..1) de la ventana visible dentro del
 /// overflow total. Normalizada (no en px) para que siga teniendo sentido si el
@@ -648,6 +655,11 @@ struct GadgetConfig {
     opacity: u8,
     /// Índice de tamaño dentro de SIZES (0..=4).
     size: u8,
+    /// Nombre del color de acento del gadget (uno de ACCENT_NAMES; default
+    /// violeta). Configs viejas sin el campo deserializan a "" y load_config
+    /// lo sanitiza al default.
+    #[serde(default)]
+    accent: String,
     /// Mapa app_id → nombre visible personalizado.
     #[serde(default)]
     renames: HashMap<String, String>,
@@ -691,6 +703,7 @@ impl Default for GadgetConfig {
         Self {
             opacity: 100,
             size: 2,
+            accent: ACCENT_NAMES[0].to_string(),
             renames: HashMap::new(),
             covers: HashMap::new(),
             scan_roots: vec![],
@@ -736,6 +749,10 @@ fn load_config(app: &tauri::AppHandle) -> GadgetConfig {
     }
     if cfg.size as usize >= SIZES.len() {
         cfg.size = 2;
+    }
+    // Configs viejas (sin el campo) deserializan accent como "" → default.
+    if !ACCENT_NAMES.contains(&cfg.accent.as_str()) {
+        cfg.accent = ACCENT_NAMES[0].to_string();
     }
     cfg
 }
@@ -1076,6 +1093,7 @@ async fn resolve_covers(
 struct MenuState {
     opacity: Vec<CheckMenuItem<Wry>>,
     size: Vec<CheckMenuItem<Wry>>,
+    accent: Vec<CheckMenuItem<Wry>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1103,6 +1121,17 @@ fn apply_size(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
         let _ = window.set_size(LogicalSize::new(w, h));
     }
     for (i, item) in state.size.iter().enumerate() {
+        let _ = item.set_checked(i == idx);
+    }
+}
+
+fn apply_accent(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
+    let mut cfg = load_config(app);
+    cfg.accent = ACCENT_NAMES[idx].to_string();
+    save_config(app, &cfg);
+    // El frontend escucha este evento y re-pinta el acento vía CSS variable.
+    let _ = app.emit("cardynox:set-accent", cfg.accent.clone());
+    for (i, item) in state.accent.iter().enumerate() {
         let _ = item.set_checked(i == idx);
     }
 }
@@ -1159,6 +1188,17 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         })
         .collect::<tauri::Result<Vec<_>>>()?;
 
+    // Submenú Color: 10 acentos (violeta es el default).
+    let accent_items: Vec<CheckMenuItem<Wry>> = ACCENT_NAMES
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            CheckMenuItemBuilder::with_id(format!("acc-{i}"), name.to_string())
+                .checked(*name == cfg.accent)
+                .build(app)
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+
     let op_submenu = Submenu::with_items(
         app,
         "Opacidad",
@@ -1178,6 +1218,16 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             .collect::<Vec<_>>(),
     )?;
 
+    let acc_submenu = Submenu::with_items(
+        app,
+        "Color",
+        true,
+        &accent_items
+            .iter()
+            .map(|i| i as &dyn IsMenuItem<Wry>)
+            .collect::<Vec<_>>(),
+    )?;
+
     let quit = MenuItem::with_id(app, "quit", "Cerrar", true, None::<&str>)?;
     // Opción para configurar la key de SteamGridDB (abre una ventana aparte).
     let sgdb_item = MenuItem::with_id(
@@ -1192,6 +1242,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         &[
             &op_submenu as &dyn IsMenuItem<Wry>,
             &size_submenu as &dyn IsMenuItem<Wry>,
+            &acc_submenu as &dyn IsMenuItem<Wry>,
             &sgdb_item as &dyn IsMenuItem<Wry>,
             &quit as &dyn IsMenuItem<Wry>,
         ],
@@ -1201,6 +1252,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(MenuState {
         opacity: opacity_items,
         size: size_items,
+        accent: accent_items,
     });
 
     TrayIconBuilder::new()
@@ -1226,6 +1278,13 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     if let Ok(idx) = id[3..].parse::<usize>() {
                         if idx < SIZES.len() {
                             apply_size(app, &state, idx);
+                        }
+                    }
+                }
+                id if id.starts_with("acc-") => {
+                    if let Ok(idx) = id[4..].parse::<usize>() {
+                        if idx < ACCENT_NAMES.len() {
+                            apply_accent(app, &state, idx);
                         }
                     }
                 }

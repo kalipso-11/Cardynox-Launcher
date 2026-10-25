@@ -135,15 +135,43 @@ function applyOpacity(pct) {
   document.documentElement.style.setProperty('--fade', String(v / 100));
 }
 
+/** Colores de acento del gadget (nombre → triple RGB), mismos 10 que el
+    submenú Color de la bandeja. Solo se setea --accent-rgb; todo lo demás
+    (--accent, bordes, sombras, glows) deriva de esa variable en styles.css.
+    Violeta = valor original del diseño. */
+const ACCENTS = {
+  violeta: "124, 134, 255",
+  rojo: "239, 68, 68",
+  verde: "52, 211, 153",
+  azul: "96, 165, 250",
+  blanco: "255, 255, 255",
+  gris: "156, 163, 175",
+  naranja: "251, 146, 60",
+  amarillo: "250, 204, 21",
+  cian: "34, 211, 238",
+  rosa: "244, 114, 182",
+};
+
+/** Cambia el acento del gadget en vivo. Nombre desconocido → no-op. */
+function applyAccent(name) {
+  const rgb = ACCENTS[name];
+  if (!rgb) return;
+  document.documentElement.style.setProperty("--accent-rgb", rgb);
+}
+
 /** Carga la config persistida (opacidad) y se suscribe a cambios en vivo.
     El tamaño no necesita IPC: llega solo por el evento de resize de la ventana. */
 function initGadgetConfig() {
   if (!invoke) return;
   window.addEventListener("resize", applyUiScale);
   invoke("get_gadget_config")
-    .then((cfg) => applyOpacity(cfg.opacity))
+    .then((cfg) => {
+      applyOpacity(cfg.opacity);
+      applyAccent(cfg.accent);
+    })
     .catch((err) => console.error("get_gadget_config falló:", err));
   tauri.event.listen("cardynox:set-opacity", (e) => applyOpacity(e.payload));
+  tauri.event.listen("cardynox:set-accent", (e) => applyAccent(e.payload));
 }
 
 /** Resuelve portadas automáticas para juegos no-Steam que aún no la tienen.
