@@ -882,3 +882,11 @@
 - **Build:** `cargo check` + `cargo build` limpios (0 warnings). App relanzada detached vía scheduled task `Cardynox_Launch` (PID 19392, ~48 MB RAM). Config en disco aún con esquema viejo (`"size":3`, sin `size_pct`) → migración in-memory al cargar; el archivo se actualiza al primer cambio.
 - **Archivos tocados:** `ui/size.js` (nuevo), `ui/size.html`, `src-tauri/src/lib.rs`, `src-tauri/capabilities/default.json`, `notas.md`.
 - **Pendiente:** (1) verificación visual del usuario: el submenú "Tamaño" abre el slider; arrastrar redimensiona in-place en vivo (no recentra); 0%≈470×280 y 100%≈mitad de pantalla; al ocultar/mostrar y tras reinicio vuelve a la misma posición; si cambió monitor/res y quedó fuera, se centra. (2) El release de 2026-10-24 sigue **stale** — re-build si se quiere distribuir. (3) item viejo: verificación visual del card-pan al soltar drag.
+
+## 2026-10-27 — Release build fresco + instalador NSIS (trae todas las features nuevas)
+- **Pedido:** "haceme el instalador como antes y decime donde está".
+- **Build:** `cargo tauri build` (release optimizado, 37.6s, 0 warnings) + makensis. Reemplaza al release stale de 2026-10-24; ahora incluye Color, Ocultar UI, Idioma, ícono C azul oscuro, y el slider de tamaño + memoria de posición.
+- **Artefactos (en target/, no versioneados):**
+  - Instalador: `src-tauri/target/release/bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` (~2.46 MiB).
+  - Exe suelto: `src-tauri/target/release/cardynox-launcher.exe` (~10.9 MiB).
+- **Nota:** NSIS perMachine instala en `C:\Program Files\Cardynox Launcher\` + shortcut escritorio + menú Inicio (ícono C azul oscuro); WebView2 por downloadBootstrapper (requiere internet al instalar).
