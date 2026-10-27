@@ -639,6 +639,15 @@ const ACCENT_NAMES: [&str; 10] = [
     "gris", "naranja", "amarillo", "cian", "rosa",
 ];
 
+/// Elementos de UI ocultables desde la bandeja (submenú "Ocultar UI").
+/// El índice coincide con HIDEABLE en ui/app.js (mismo orden). Checked = oculto.
+const HIDDEN_UI_NAMES: [&str; 4] = [
+    "Icono de arrastrar ventana",
+    "Filtro",
+    "Botones inferiores",
+    "Conteo de juegos",
+];
+
 /// Posición custom de la portada en el overlay Detalles (paneo por arrastre):
 /// clave del juego → offset NORMALIZADO (0..1) de la ventana visible dentro del
 /// overflow total. Normalizada (no en px) para que siga teniendo sentido si el
@@ -696,6 +705,11 @@ struct GadgetConfig {
     /// Posición de portada en Detalles (paneo): clave del juego → offset 0..1.
     #[serde(default)]
     cover_pans: HashMap<String, CoverPan>,
+    /// Elementos de UI ocultos desde la bandeja: índice dentro de
+    /// HIDDEN_UI_NAMES → true si está oculto. Configs viejas sin el campo
+    /// deserializan a vec vacío; load_config lo normaliza.
+    #[serde(default)]
+    hidden_ui: Vec<bool>,
 }
 
 impl Default for GadgetConfig {
@@ -714,6 +728,7 @@ impl Default for GadgetConfig {
             blocked_games: vec![],
             manual_games: vec![],
             cover_pans: HashMap::new(),
+            hidden_ui: vec![false; HIDDEN_UI_NAMES.len()],
         }
     }
 }
@@ -754,6 +769,9 @@ fn load_config(app: &tauri::AppHandle) -> GadgetConfig {
     if !ACCENT_NAMES.contains(&cfg.accent.as_str()) {
         cfg.accent = ACCENT_NAMES[0].to_string();
     }
+    // Configs viejas (sin el campo) traen hidden_ui vacío; normaliza a
+    // exactamente 4 entradas (resize también trunca si sobraran).
+    cfg.hidden_ui.resize(HIDDEN_UI_NAMES.len(), false);
     cfg
 }
 
@@ -1094,6 +1112,7 @@ struct MenuState {
     opacity: Vec<CheckMenuItem<Wry>>,
     size: Vec<CheckMenuItem<Wry>>,
     accent: Vec<CheckMenuItem<Wry>>,
+    hidden_ui: Vec<CheckMenuItem<Wry>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1134,6 +1153,20 @@ fn apply_accent(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
     for (i, item) in state.accent.iter().enumerate() {
         let _ = item.set_checked(i == idx);
     }
+}
+
+/// Alterna la visibilidad de un elemento de UI (submenú "Ocultar UI").
+/// A diferencia de opacidad/tamaño/color (selección única), esto es toggle
+/// por elemento: checked = oculto. El estado se persiste.
+fn apply_hide_ui(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
+    let mut cfg = load_config(app);
+    let now_hidden = !cfg.hidden_ui[idx];
+    cfg.hidden_ui[idx] = now_hidden;
+    save_config(app, &cfg);
+    // El frontend escucha este evento y muestra/oculta el elemento.
+    // Payload: [índice, oculto].
+    let _ = app.emit("cardynox:set-ui-hidden", (idx, now_hidden));
+    let _ = state.hidden_ui[idx].set_checked(now_hidden);
 }
 
 /// Redimensiona la ventana y la recentra en su monitor (fallback: solo
@@ -1199,6 +1232,17 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         })
         .collect::<tauri::Result<Vec<_>>>()?;
 
+    // Submenú Ocultar UI: toggle por elemento. Checked = oculto.
+    let hidden_items: Vec<CheckMenuItem<Wry>> = HIDDEN_UI_NAMES
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            CheckMenuItemBuilder::with_id(format!("hidd-{i}"), *name)
+                .checked(cfg.hidden_ui[i])
+                .build(app)
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+
     let op_submenu = Submenu::with_items(
         app,
         "Opacidad",
@@ -1228,6 +1272,16 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             .collect::<Vec<_>>(),
     )?;
 
+    let hidd_submenu = Submenu::with_items(
+        app,
+        "Ocultar UI",
+        true,
+        &hidden_items
+            .iter()
+            .map(|i| i as &dyn IsMenuItem<Wry>)
+            .collect::<Vec<_>>(),
+    )?;
+
     let quit = MenuItem::with_id(app, "quit", "Cerrar", true, None::<&str>)?;
     // Opción para configurar la key de SteamGridDB (abre una ventana aparte).
     let sgdb_item = MenuItem::with_id(
@@ -1243,6 +1297,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             &op_submenu as &dyn IsMenuItem<Wry>,
             &size_submenu as &dyn IsMenuItem<Wry>,
             &acc_submenu as &dyn IsMenuItem<Wry>,
+            &hidd_submenu as &dyn IsMenuItem<Wry>,
             &sgdb_item as &dyn IsMenuItem<Wry>,
             &quit as &dyn IsMenuItem<Wry>,
         ],
@@ -1253,6 +1308,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         opacity: opacity_items,
         size: size_items,
         accent: accent_items,
+        hidden_ui: hidden_items,
     });
 
     TrayIconBuilder::new()
@@ -1285,6 +1341,13 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     if let Ok(idx) = id[4..].parse::<usize>() {
                         if idx < ACCENT_NAMES.len() {
                             apply_accent(app, &state, idx);
+                        }
+                    }
+                }
+                id if id.starts_with("hidd-") => {
+                    if let Ok(idx) = id[5..].parse::<usize>() {
+                        if idx < HIDDEN_UI_NAMES.len() {
+                            apply_hide_ui(app, &state, idx);
                         }
                     }
                 }

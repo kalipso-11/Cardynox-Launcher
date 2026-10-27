@@ -159,6 +159,24 @@ function applyAccent(name) {
   document.documentElement.style.setProperty("--accent-rgb", rgb);
 }
 
+/** Elementos de UI ocultables desde la bandeja (submenú "Ocultar UI").
+    MISMO ORDEN que HIDDEN_UI_NAMES en lib.rs. display:none se restaura con "".
+    [0] manija de arrastre, [1] botón filtro, [2] botones inferiores,
+    [3] conteo de juegos (footer). */
+const HIDEABLE = ["#drag-handle", "#btn-filter", ".actions", "#status"];
+
+/** Muestra u oculta un elemento del gadget. idx fuera de rango → no-op. */
+function applyUiHidden(idx, hidden) {
+  const el = document.querySelector(HIDEABLE[idx]);
+  if (!el) return;
+  el.style.display = hidden ? "none" : "";
+}
+
+/** Aplica el estado persistido de todos los elementos (arranque). */
+function applyAllUiHidden(list) {
+  (list || []).forEach((hidden, idx) => applyUiHidden(idx, !!hidden));
+}
+
 /** Carga la config persistida (opacidad) y se suscribe a cambios en vivo.
     El tamaño no necesita IPC: llega solo por el evento de resize de la ventana. */
 function initGadgetConfig() {
@@ -168,10 +186,13 @@ function initGadgetConfig() {
     .then((cfg) => {
       applyOpacity(cfg.opacity);
       applyAccent(cfg.accent);
+      applyAllUiHidden(cfg.hidden_ui);
     })
     .catch((err) => console.error("get_gadget_config falló:", err));
   tauri.event.listen("cardynox:set-opacity", (e) => applyOpacity(e.payload));
   tauri.event.listen("cardynox:set-accent", (e) => applyAccent(e.payload));
+  // Payload del toggle de la bandeja: [índice, oculto].
+  tauri.event.listen("cardynox:set-ui-hidden", (e) => applyUiHidden(e.payload[0], e.payload[1]));
 }
 
 /** Resuelve portadas automáticas para juegos no-Steam que aún no la tienen.

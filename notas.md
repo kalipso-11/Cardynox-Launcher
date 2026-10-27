@@ -795,3 +795,14 @@
 - **Verificación:** build debug limpio. App relanzada y corriendo (PID 27860 al cierre de esta entrada).
 - **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/styles.css` (~30 reemplazos de hardcode violeta → var), `ui/app.js`.
 - **Pendiente:** (1) verificación visual del usuario: submenú "Color" con check en el activo, cambio en vivo (bordes/sombras/glows/botón Jugar/checkboxs), persistencia tras reinicio; (2) item viejo: verificación visual del card-pan al soltar el drag; (3) el release de 2026-10-24 quedó **stale** (no trae esta feature) — re-build si se quiere distribuir ya.
+
+## 2026-10-27 — Bandeja: submenú "Ocultar UI" (4 toggles de visibilidad)
+- **Pedido del usuario:** opción "Ocultar UI" en la bandeja con 4 opciones: icono de arrastrar ventana, filtro, botones inferiores y conteo de juegos (el texto de abajo con la cantidad).
+- **Semántica:** checked = OCULTO (default todo visible, sin checks). Es toggle por elemento, a diferencia de Opacidad/Tamaño/Color (selección única). Persistido en config.
+- **Elementos → selectores** (`ui/app.js`, `const HIDEABLE`): [0] `#drag-handle`, [1] `#btn-filter`, [2] `.actions` (Detalles/Jugar/Agregar), [3] `#status` (footer con conteo). Mismo orden que `HIDDEN_UI_NAMES` en Rust. Ocultar = `display:none`; los 4 son flex items (`flex:none`) → se retiran del layout sin dejar huecos (verificado en styles.css; `#status` tiene height:13px fijo pero display:none lo elimina completo). Ocultar Filtro también impide abrir el dropdown (no hay botón que lo dispare), coherente.
+- **Backend** (`src-tauri/src/lib.rs`): `const HIDDEN_UI_NAMES: [&str; 4]`; `GadgetConfig.hidden_ui: Vec<bool>` con `#[serde(default)]` + normalización en `load_config` (`resize(4, false)`: configs viejas sin campo → vacío → todo visible) + `Default`. `MenuState.hidden_ui: Vec<CheckMenuItem<Wry>>`. `apply_hide_ui(app, state, idx)`: invierte estado → guarda → emite `"cardynox:set-ui-hidden"` con payload `(idx, now_hidden)` (tuple → array JS) → checkmark. Bandeja: items `hidd-{i}`, submenú **"Ocultar UI"** entre Color y Activar SGDB; brazo del handler `id[5..].parse()`.
+- **Frontend** (`ui/app.js`): `applyUiHidden(idx, hidden)` (querySelector por HIDEABLE[idx], display none/"") + `applyAllUiHidden(list)` (arranque). En `initGadgetConfig()`: aplica `cfg.hidden_ui` al cargar + `tauri.event.listen("cardynox:set-ui-hidden", e => applyUiHidden(e.payload[0], e.payload[1]))`.
+- **Cero cambios de CSS** (toggle inline alcanza).
+- **Verificación:** build debug limpio sin warnings. App relanzada (PID 27512 al cierre de esta entrada).
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/app.js`.
+- **Pendiente:** (1) verificación visual del usuario: los 4 toggles funcionan en vivo y persisten; (2) items viejos: card-pan al soltar drag; release stale (sin Color ni Ocultar UI) — re-build si se distribuye.
