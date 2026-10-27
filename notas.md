@@ -865,3 +865,20 @@
 - **Build:** ~23s compilación + NSIS. Sin warnings.
 - **Archivos tocados:** `src-tauri/tauri.conf.json`, `notas.md`.
 - **Pendiente:** (1) usuario instala y verifica: escritorio, menú Inicio, íconos; (2) los shortcuts apuntan al .exe en Program Files → el autostart (HKCU Run) ahora debería guardar la ruta de Program Files para que funcione tras reinstalar.
+
+## 2026-10-27 — Slider de tamaño (0–100%) + memoria de posición del gadget
+- **Pedido del usuario:** (1) el gadget recuerde su posición al reiniciar la PC / cambiar de monitor y resolución; (2) el tamaño tenga sentido con la escala de pantalla; (3) reemplazar los 5 tamaños discretos por una BARRA (slider): 0% = Mini actual, 100% = mitad de la pantalla.
+- **Decisión de diseño:** tamaño como porcentaje continuo `size_pct: f64` (0..=1) en vez de niveles discretos. Escala relativa a pantalla: 0% → base fija 470×280 (Mini), 100% → `pantalla/2`. Interpolación lineal en `compute_size()`. Migración de configs viejas: `size` (0..4) → `size_pct = size/4.0`.
+- **Rust (`src-tauri/src/lib.rs`):**
+  - `const SIZE_BASE_W/H = 470/280` + `fn compute_size(pct, screen_w, screen_h) -> (w,h)` (clamp 0..=1; 0%=base, 100%=mitad).
+  - `GadgetConfig` gana `size_pct: f64` (default 0.5) + `size: u8` legacy (`#[allow(dead_code)]`, solo para deserializar configs viejas) + `pos_x/pos_y: Option<f64>`. `load_config()`: migración `if size_pct==0 && size>0 { size_pct=size/4.0 }` + clamp.
+  - `#[tauri::command] set_size_pct(pct)`: clamp → guarda config → **resize in-place** (`set_size` sin `set_position`, top-left anclado, NO recentra) con el monitor actual. Lo invoca el slider en vivo.
+  - `save_window_position()`: guarda `pos_x/pos_y` (lógicos) del main window; se invoca al OCULTAR (bandeja + toggle clic-izq), no en cada `Moved` (evita writes de disco al arrastrar).
+  - `restore_position()`: al arrancar, bounds-check (≥100px visibles en algún monitor); si es válida aplica la pos guardada; si no (cambió monitor/res) centra en el primario.
+  - Arranque: `compute_size(cfg.size_pct, …)` + `restore_position()` reemplazan al viejo resize fijo por nivel.
+- **Popup de tamaño (frontend):** item único del submenú "Tamaño" abre la ventana `size` con un slider. `ui/size.html` (slider 0–100 + label % + botón ✕) y `ui/size.js` (lee `get_gadget_config().size_pct`; `input` → `invoke("set_size_pct",{pct})` en vivo; ✕/Esc destruyen → al reabrir se recrea y releé el valor). Rust: `show_size_window()` (decorated, `always_on_top`, `resizable:false`, `skip_taskbar`, centrada 320×100); CSS del popup con fondo sólido `#0b0e1f` (no ver caja blanca detrás del pill).
+- **Capabilities (`src-tauri/capabilities/default.json`):** agregado `"size"` a `windows` + permiso `core:window:allow-destroy` (✕/Esc destruyen y se reconstruye limpia; la X nativa también destruye).
+- **Bugs corregidos (código del agente previo, no compilaba):** (1) E0308 en `restore_position`: `m.position()`/`m.scale_factor()` devuelven valor directo (no `Result`) → se quitó el patrón `(Ok(mpos),Ok(mscale)) … else`; (2) warning unused `Result` de `show_size_window(app)` en el handler → `let _ =`; (3) se **borró la fn muerta `resize_centered`** (sin llamadores; el arranque usa `compute_size` directo).
+- **Build:** `cargo check` + `cargo build` limpios (0 warnings). App relanzada detached vía scheduled task `Cardynox_Launch` (PID 19392, ~48 MB RAM). Config en disco aún con esquema viejo (`"size":3`, sin `size_pct`) → migración in-memory al cargar; el archivo se actualiza al primer cambio.
+- **Archivos tocados:** `ui/size.js` (nuevo), `ui/size.html`, `src-tauri/src/lib.rs`, `src-tauri/capabilities/default.json`, `notas.md`.
+- **Pendiente:** (1) verificación visual del usuario: el submenú "Tamaño" abre el slider; arrastrar redimensiona in-place en vivo (no recentra); 0%≈470×280 y 100%≈mitad de pantalla; al ocultar/mostrar y tras reinicio vuelve a la misma posición; si cambió monitor/res y quedó fuera, se centra. (2) El release de 2026-10-24 sigue **stale** — re-build si se quiere distribuir. (3) item viejo: verificación visual del card-pan al soltar drag.

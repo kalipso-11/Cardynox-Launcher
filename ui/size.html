@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tamaño</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: #0b0e1f; width: 100%; height: 100%; overflow: hidden; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px; padding: 16px 20px;
+    }
+    .slider-wrap {
+      flex: 1;
+      background: rgba(15, 17, 35, 0.85);
+      border: 1px solid rgba(30, 58, 138, 0.6);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex; align-items: center; gap: 12px;
+      backdrop-filter: blur(12px);
+    }
+    input[type="range"] {
+      flex: 1; height: 6px;
+      -webkit-appearance: none; appearance: none;
+      background: rgba(59, 130, 246, 0.3);
+      border-radius: 3px; outline: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #3b82f6; border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(59,130,246,0.4);
+      cursor: grab;
+    }
+    input[type="range"]::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.15); }
+    .pct { font-size: 13px; color: #93c5fd; min-width: 36px; text-align: right; font-weight: 600; }
+    .close-btn {
+      background: rgba(15,17,35,0.85); border: 1px solid rgba(30,58,138,0.4);
+      color: #93c5fd; width: 32px; height: 32px; border-radius: 50%;
+      font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .close-btn:hover { background: rgba(30,58,138,0.5); color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="slider-wrap">
+    <input type="range" id="slider" min="0" max="100" value="50" />
+    <span class="pct" id="pctLabel">50%</span>
+  </div>
+  <button class="close-btn" id="btnClose" title="Cerrar">&#10005;</button>
+  <script src="size.js"></script>
+</body>
+</html>

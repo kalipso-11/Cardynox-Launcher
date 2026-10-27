@@ -493,6 +493,29 @@ fn show_sgdb_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Abre (o enfoca) la popup de tamaño con slider.
+fn show_size_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window("size") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let window = WebviewWindowBuilder::new(
+        app,
+        "size",
+        WebviewUrl::App("size.html".into()),
+    )
+    .title("Tamaño · Cardynox")
+    .always_on_top(true)
+    .resizable(false)
+    .skip_taskbar(true)
+    .center()
+    .build()?;
+    let _ = window.set_size(LogicalSize::new(320.0, 100.0));
+    let _ = window.set_focus();
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Portadas personalizadas (imagen/GIF local) — persistidas en covers/
 // ---------------------------------------------------------------------------
@@ -639,16 +662,20 @@ fn clear_cover_pan(app_id: String, app: tauri::AppHandle) -> Result<(), String> 
 // ---------------------------------------------------------------------------
 
 const OPACITY_STEPS: [u8; 5] = [20, 40, 60, 80, 100];
-const SIZE_NAMES: [&str; 5] = ["Mini", "Pequeño", "Mediano", "Grande", "Enorme"];
-/// (ancho, alto) en píxeles lógicos por tamaño — proporcionales al diseño
-/// base de 620×370. "Mediano" (índice 2) coincide con tauri.conf.json.
-const SIZES: [(f64, f64); 5] = [
-    (470.0, 280.0),
-    (545.0, 325.0),
-    (620.0, 370.0),
-    (710.0, 424.0),
-    (810.0, 483.0),
-];
+/// Tamaño base (0% del slider): píxeles lógicos mínimos.
+const SIZE_BASE_W: f64 = 470.0;
+const SIZE_BASE_H: f64 = 280.0;
+
+/// Calcula el tamaño del gadget según porcentaje (0..=1) y dimensiones de pantalla.
+/// 0% = base (Mini), 100% = mitad de la pantalla.
+fn compute_size(pct: f64, screen_w: f64, screen_h: f64) -> (f64, f64) {
+    let pct = pct.clamp(0.0, 1.0);
+    let max_w = screen_w / 2.0;
+    let max_h = screen_h / 2.0;
+    let w = SIZE_BASE_W + (max_w - SIZE_BASE_W) * pct;
+    let h = SIZE_BASE_H + (max_h - SIZE_BASE_H) * pct;
+    (w, h)
+}
 
 /// Colores de acento del gadget (índice 0 = violeta, el default). El frontend
 /// lleva la triple RGB de cada uno; Rust solo persiste el nombre.
@@ -669,9 +696,7 @@ const HIDDEN_UI_NAMES: [&str; 4] = [
 /// Idiomas soportados por la UI (submenú "Idioma" de la bandeja).
 const LANGS: [&str; 2] = ["es", "en"];
 
-/// Nombres de tamaño en inglés (índice = SIZE_NAMES / SIZES). Solo display:
-/// la config persiste el índice, no el nombre.
-const SIZE_NAMES_EN: [&str; 5] = ["Mini", "Small", "Medium", "Large", "Huge"];
+
 
 /// Nombres de acento en inglés (índice = ACCENT_NAMES). Solo display: el
 /// nombre canónico persistido (config/evento) sigue siendo el español.
@@ -702,8 +727,19 @@ struct CoverPan {
 struct GadgetConfig {
     /// Opacidad total del gadget en porcentaje (uno de OPACITY_STEPS).
     opacity: u8,
-    /// Índice de tamaño dentro de SIZES (0..=4).
+    /// Porcentaje de tamaño (0.0..=1.0). 0 = Mini, 1.0 = mitad de pantalla.
+    /// Configs viejas con `size: u8` se migran en load_config.
+    #[serde(default)]
+    size_pct: f64,
+    /// Campo legacy para deserialización de configs anteriores.
+    #[serde(default)]
+    #[allow(dead_code)]
     size: u8,
+    /// Posición guardada del gadget (píxeles lógicos). None = centrar al arrancar.
+    #[serde(default)]
+    pos_x: Option<f64>,
+    #[serde(default)]
+    pos_y: Option<f64>,
     /// Nombre del color de acento del gadget (uno de ACCENT_NAMES; default
     /// violeta). Configs viejas sin el campo deserializan a "" y load_config
     /// lo sanitiza al default.
@@ -760,7 +796,10 @@ impl Default for GadgetConfig {
     fn default() -> Self {
         Self {
             opacity: 100,
-            size: 2,
+            size_pct: 0.5,
+            size: 0,
+            pos_x: None,
+            pos_y: None,
             accent: ACCENT_NAMES[0].to_string(),
             renames: HashMap::new(),
             covers: HashMap::new(),
@@ -807,9 +846,12 @@ fn load_config(app: &tauri::AppHandle) -> GadgetConfig {
     if !OPACITY_STEPS.contains(&cfg.opacity) {
         cfg.opacity = 100;
     }
-    if cfg.size as usize >= SIZES.len() {
-        cfg.size = 2;
+    // Migración: configs viejas con size>0 y size_pct=0 (missing) → mapear.
+    if cfg.size_pct == 0.0 && cfg.size > 0 {
+        cfg.size_pct = (cfg.size as f64) / 4.0;
     }
+    // Clamp final.
+    cfg.size_pct = cfg.size_pct.clamp(0.0, 1.0);
     // Configs viejas (sin el campo) deserializan accent como "" → default.
     if !ACCENT_NAMES.contains(&cfg.accent.as_str()) {
         cfg.accent = ACCENT_NAMES[0].to_string();
@@ -1161,13 +1203,12 @@ async fn resolve_covers(
 struct MenuState {
     toggle_vis: MenuItem<Wry>,
     autostart: CheckMenuItem<Wry>,
+    size_item: MenuItem<Wry>,
     opacity: Vec<CheckMenuItem<Wry>>,
-    size: Vec<CheckMenuItem<Wry>>,
     accent: Vec<CheckMenuItem<Wry>>,
     hidden_ui: Vec<CheckMenuItem<Wry>>,
-    // Submenús (para relabel): Opacidad / Tamaño / Color / Ocultar UI / Idioma.
+    // Submenús (para relabel): Opacidad / Color / Ocultar UI / Idioma.
     op_submenu: Submenu<Wry>,
-    size_submenu: Submenu<Wry>,
     accent_submenu: Submenu<Wry>,
     hidden_submenu: Submenu<Wry>,
     lang_submenu: Submenu<Wry>,
@@ -1192,17 +1233,80 @@ fn apply_opacity(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
     }
 }
 
-fn apply_size(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
-    let mut cfg = load_config(app);
-    cfg.size = idx as u8;
-    save_config(app, &cfg);
+/// Comando Tauri: el popup de tamaño lo invoca con pct en 0.0..=1.0.
+/// Resize in-place (sin re-centrar) + persiste la config.
+#[tauri::command]
+fn set_size_pct(pct: f64, app: tauri::AppHandle) -> Result<(), String> {
+    let pct = pct.clamp(0.0, 1.0);
+    let mut cfg = load_config(&app);
+    cfg.size_pct = pct;
+    save_config(&app, &cfg);
     if let Some(window) = app.get_webview_window("main") {
-        let (w, h) = SIZES[idx];
-        // Sin re-centrado: la ventana crece/se reduce desde su posición actual.
-        let _ = window.set_size(LogicalSize::new(w, h));
+        if let (Ok(Some(monitor)), Ok(scale)) = (window.current_monitor(), window.scale_factor()) {
+            if scale > 0.0 {
+                let sw = monitor.size().width as f64 / scale;
+                let sh = monitor.size().height as f64 / scale;
+                let (w, h) = compute_size(pct, sw, sh);
+                let _ = window.set_size(LogicalSize::new(w, h));
+            }
+        }
     }
-    for (i, item) in state.size.iter().enumerate() {
-        let _ = item.set_checked(i == idx);
+    Ok(())
+}
+
+/// Guarda la posición actual de la ventana en config.
+fn save_window_position(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let (Ok(pos), Ok(scale)) = (window.outer_position(), window.scale_factor()) {
+            if scale > 0.0 {
+                let mut cfg = load_config(app);
+                cfg.pos_x = Some(pos.x as f64 / scale);
+                cfg.pos_y = Some(pos.y as f64 / scale);
+                save_config(app, &cfg);
+            }
+        }
+    }
+}
+
+/// Al arrancar: restaura la posición guardada si está dentro de un monitor;
+/// si no, centra en el primario.
+fn restore_position(window: &WebviewWindow) {
+    let app = window.app_handle();
+    let cfg = load_config(app);
+    if let (Some(px), Some(py)) = (cfg.pos_x, cfg.pos_y) {
+        // Bounds check: al menos 100px de la ventana deben estar visibles en algún monitor.
+        let monitors = window.available_monitors().unwrap_or_default();
+        let valid = monitors.iter().any(|m| {
+            let mpos = m.position();
+            let mscale = m.scale_factor();
+            let ms = mscale.max(0.1);
+            let mx = mpos.x as f64 / ms;
+            let my = mpos.y as f64 / ms;
+            let mw = m.size().width as f64 / ms;
+            let mh = m.size().height as f64 / ms;
+            // Intersección mínima de 100px en ambos ejes.
+            px < mx + mw - 100.0 && px + 100.0 > mx && py < my + mh - 100.0 && py + 100.0 > my
+        });
+        if valid {
+            let _ = window.set_position(LogicalPosition::new(px, py));
+            return;
+        }
+    }
+    // Fallback: centrar en el monitor primario.
+    if let (Ok(Some(monitor)), Ok(scale)) = (window.primary_monitor(), window.scale_factor()) {
+        if scale > 0.0 {
+            let mx = monitor.position().x as f64 / scale;
+            let my = monitor.position().y as f64 / scale;
+            let mw = monitor.size().width as f64 / scale;
+            let mh = monitor.size().height as f64 / scale;
+            let size = window.outer_size().unwrap_or_default();
+            let sw = size.width as f64 / scale;
+            let sh = size.height as f64 / scale;
+            let _ = window.set_position(LogicalPosition::new(
+                mx + (mw - sw) / 2.0,
+                my + (mh - sh) / 2.0,
+            ));
+        }
     }
 }
 
@@ -1265,15 +1369,11 @@ fn toggle_vis_label(lang: &str, visible: bool) -> String {
 fn relabel_menu(state: &MenuState, lang: &str) {
     let en = lang == "en";
     state.autostart.set_text(if en { "Start with Windows" } else { "Iniciar con Windows" }).ok();
+    state.size_item.set_text(if en { "Size" } else { "Tamaño" }).ok();
     state.op_submenu.set_text(if en { "Opacity" } else { "Opacidad" }).ok();
-    state.size_submenu.set_text(if en { "Size" } else { "Tamaño" }).ok();
     state.accent_submenu.set_text("Color").ok();
     state.hidden_submenu.set_text(if en { "Hide UI" } else { "Ocultar UI" }).ok();
     state.lang_submenu.set_text(if en { "Language" } else { "Idioma" }).ok();
-    for (i, item) in state.size.iter().enumerate() {
-        let label = if en { SIZE_NAMES_EN[i] } else { SIZE_NAMES[i] };
-        item.set_text(label).ok();
-    }
     for (i, item) in state.accent.iter().enumerate() {
         let label = if en { ACCENT_NAMES_EN[i] } else { ACCENT_NAMES[i] };
         item.set_text(label).ok();
@@ -1350,6 +1450,7 @@ fn do_toggle_visibility(app: &tauri::AppHandle, state: &MenuState) {
     let visible = window.is_visible().unwrap_or(false);
     let minimized = window.is_minimized().unwrap_or(false);
     if visible && !minimized {
+        save_window_position(app);
         let _ = window.hide();
     } else {
         let _ = window.show();
@@ -1367,26 +1468,6 @@ fn do_autostart(_app: &tauri::AppHandle, state: &MenuState) {
         eprintln!("[cardynox] Autostart error: {e}");
     }
     let _ = state.autostart.set_checked(new_state);
-}
-
-/// Redimensiona la ventana y la recentra en su monitor (fallback: solo
-/// redimensiona). El frontend escala la UI sola vía el evento de resize.
-fn resize_centered(window: &WebviewWindow, w: f64, h: f64) {
-    if let (Ok(Some(monitor)), Ok(scale)) = (window.current_monitor(), window.scale_factor()) {
-        if scale > 0.0 {
-            let mx = monitor.position().x as f64 / scale;
-            let my = monitor.position().y as f64 / scale;
-            let mw = monitor.size().width as f64 / scale;
-            let mh = monitor.size().height as f64 / scale;
-            let _ = window.set_size(LogicalSize::new(w, h));
-            let _ = window.set_position(LogicalPosition::new(
-                mx + (mw - w) / 2.0,
-                my + (mh - h) / 2.0,
-            ));
-            return;
-        }
-    }
-    let _ = window.set_size(LogicalSize::new(w, h));
 }
 
 // ---------------------------------------------------------------------------
@@ -1412,14 +1493,14 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         })
         .collect::<tauri::Result<Vec<_>>>()?;
 
-    // Submenú Tamaño: Mini / Pequeño / Mediano / Grande / Enorme.
-    let size_items: Vec<CheckMenuItem<Wry>> = (0..SIZES.len())
-        .map(|i| {
-            CheckMenuItemBuilder::with_id(format!("sz-{i}"), SIZE_NAMES[i])
-                .checked(i as u8 == cfg.size)
-                .build(app)
-        })
-        .collect::<tauri::Result<Vec<_>>>()?;
+    // Tamaño: item único que abre una popup con slider (0%..100%).
+    let size_item = MenuItem::with_id(
+        app,
+        "size",
+        if cfg.lang == "en" { "Size" } else { "Tamaño" },
+        true,
+        None::<&str>,
+    )?;
 
     // Submenú Color: 10 acentos (violeta es el default).
     let accent_items: Vec<CheckMenuItem<Wry>> = ACCENT_NAMES
@@ -1448,15 +1529,6 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         "Opacidad",
         true,
         &opacity_items
-            .iter()
-            .map(|i| i as &dyn IsMenuItem<Wry>)
-            .collect::<Vec<_>>(),
-    )?;
-    let size_submenu = Submenu::with_items(
-        app,
-        "Tamaño",
-        true,
-        &size_items
             .iter()
             .map(|i| i as &dyn IsMenuItem<Wry>)
             .collect::<Vec<_>>(),
@@ -1531,7 +1603,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             &autostart_item as &dyn IsMenuItem<Wry>,
             &sep as &dyn IsMenuItem<Wry>,
             &op_submenu as &dyn IsMenuItem<Wry>,
-            &size_submenu as &dyn IsMenuItem<Wry>,
+            &size_item as &dyn IsMenuItem<Wry>,
             &accent_submenu as &dyn IsMenuItem<Wry>,
             &hidden_submenu as &dyn IsMenuItem<Wry>,
             &lang_submenu as &dyn IsMenuItem<Wry>,
@@ -1545,12 +1617,11 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(MenuState {
         toggle_vis: toggle_vis_item,
         autostart: autostart_item,
+        size_item,
         opacity: opacity_items,
-        size: size_items,
         accent: accent_items,
         hidden_ui: hidden_items,
         op_submenu,
-        size_submenu,
         accent_submenu,
         hidden_submenu,
         lang_submenu,
@@ -1590,12 +1661,8 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                         }
                     }
                 }
-                id if id.starts_with("sz-") => {
-                    if let Ok(idx) = id[3..].parse::<usize>() {
-                        if idx < SIZES.len() {
-                            apply_size(app, &state, idx);
-                        }
-                    }
+                "size" => {
+                    let _ = show_size_window(app);
                 }
                 id if id.starts_with("acc-") => {
                     if let Ok(idx) = id[4..].parse::<usize>() {
@@ -1649,6 +1716,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             let visible = window.is_visible().unwrap_or(false);
             let minimized = window.is_minimized().unwrap_or(false);
             if visible && !minimized {
+                save_window_position(app);
                 let _ = window.hide();
             } else {
                 let _ = window.show();
@@ -1695,7 +1763,8 @@ pub fn run() {
             get_launch_args,
             remove_game,
             add_game,
-            resolve_covers
+            resolve_covers,
+            set_size_pct
         ])
         .setup(|app| {
             setup_tray(app.handle())?;
@@ -1703,13 +1772,18 @@ pub fn run() {
             // siempreOnBottom de la config (tao) la mantiene debajo de todas
             // las ventanas normales en cada cambio de Z-order.
             if let Some(window) = app.get_webview_window("main") {
-                // Aplica el tamaño persistido antes de mostrar (la ventana se
-                // crea con 620×370; si la config pide otro tamaño, lo ajusta).
                 let cfg = load_config(app.handle());
-                if cfg.size != GadgetConfig::default().size {
-                    let (w, h) = SIZES[cfg.size as usize];
-                    resize_centered(&window, w, h);
+                // Aplica tamaño según porcentaje + monitor actual.
+                if let (Ok(Some(monitor)), Ok(scale)) = (window.current_monitor(), window.scale_factor()) {
+                    if scale > 0.0 {
+                        let sw = monitor.size().width as f64 / scale;
+                        let sh = monitor.size().height as f64 / scale;
+                        let (w, h) = compute_size(cfg.size_pct, sw, sh);
+                        let _ = window.set_size(LogicalSize::new(w, h));
+                    }
                 }
+                // Restaura posición guardada (o centra si no hay / off-screen).
+                restore_position(&window);
                 let _ = window.show();
             }
             Ok(())

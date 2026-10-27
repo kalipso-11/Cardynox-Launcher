@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Permisos por defecto de la ventana principal","local":true,"windows":["main","sgdb"],"permissions":["core:default","core:window:allow-start-dragging"]}}
+{"default":{"identifier":"default","description":"Permisos por defecto de la ventana principal","local":true,"windows":["main","sgdb","size"],"permissions":["core:default","core:window:allow-start-dragging","core:window:allow-destroy"]}}

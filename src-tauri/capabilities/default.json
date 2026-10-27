@@ -2,9 +2,10 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permisos por defecto de la ventana principal",
-  "windows": ["main", "sgdb"],
+  "windows": ["main", "sgdb", "size"],
   "permissions": [
     "core:default",
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    "core:window:allow-destroy"
   ]
 }
