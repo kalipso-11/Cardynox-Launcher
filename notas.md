@@ -856,3 +856,12 @@
 - **Build:** limpio sin warnings. App corriendo (PID 26504).
 - **Archivos tocados:** `src-tauri/src/lib.rs`.
 - **Pendiente:** verificación visual del usuario: (1) toggle Ocultar/Mostrar funciona + cambia label; (2) clic izquierdo en ícono también actualiza el label; (3) "Iniciar con Windows" persiste tras reinicio de Windows; (4) i18n: los labels cambian al alternar Idioma.
+
+## 2026-10-27 — Release build + instalador NSIS
+- **Pedido del usuario:** compilar release, crear instalador que instale en Program Files, con acceso directo en escritorio y en menú Inicio, todo con el ícono actual (azul oscuro C).
+- **Config NSIS** (`tauri.conf.json → bundle.windows.nsis`): `installMode: "perMachine"` (Program Files), `installerIcon: icons/icon.ico`, `startMenuFolder: "Cardynox Launcher"`, `languages: [Spanish, English]`. WebView2: `downloadBootstrapper` (no embebido, baja ~1.8 MB del instalador; requiere internet al instalar). `targets: ["nsis"]` (solo NSIS, sin MSI/WiX).
+- **Output:** `src-tauri/target/release/bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` (**2.45 MiB**). Exe release: ~10.8 MiB.
+- **Comportamiento del instalador NSIS por defecto de Tauri:** instala en `C:\Program Files\Cardynox Launcher\`, crea acceso directo en escritorio (con ícono C azul oscuro) + shortcut en `Inicio > Programas > Cardynox Launcher`. El .exe embebido tiene el ícono `icon.ico`.
+- **Build:** ~23s compilación + NSIS. Sin warnings.
+- **Archivos tocados:** `src-tauri/tauri.conf.json`, `notas.md`.
+- **Pendiente:** (1) usuario instala y verifica: escritorio, menú Inicio, íconos; (2) los shortcuts apuntan al .exe en Program Files → el autostart (HKCU Run) ahora debería guardar la ruta de Program Files para que funcione tras reinstalar.
