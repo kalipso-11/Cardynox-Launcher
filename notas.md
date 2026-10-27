@@ -846,3 +846,13 @@
 - **Cambio:** gradiente del tile → `#1e3a8a` (azul oscuro) → `#2563eb` (azul medio, brillo diagonal). Misma geometría (tile redondeado, highlight, anillo-C con caps, centrado óptico). Mismo procedimiento: PIL 1024 → PNG/ICO → sobrescribir `src-tauri/icons/` → `cargo clean -p` + dev.
 - **App corriendo:** PID 25444. Build limpio 11.7s.
 - **Pendiente:** verificación visual del usuario (bandeja). Caché de íconos Windows: si no cambia al instante, ocultar/mostrar el ícono en el área de notificación. Oferta pendiente (no aprobada): cambiar acento default del gadget a azul para coherencia con el ícono.
+
+## 2026-10-27 — Bandeja: "Ocultar/Mostrar" + "Iniciar con Windows"
+- **Pedido del usuario:** opción "Iniciar con Windows" (autostart) + opción arriba que diga "Ocultar"/"Mostrar" según estado.
+- **Ocultar/Mostrar** (`MenuItem` id `toggle-vis`): primer item del menú de bandeja. El texto cambia dinámicamente: visible → "Ocultar"/"Hide", oculto → "Mostrar"/"Show" (según `cfg.lang`). Handler: hide/show/unminimize/focus + `update_toggle_vis_label()`. También se refresca tras clic izquierdo en el ícono y tras cambio de idioma (`apply_lang` → `update_toggle_vis_label`).
+- **Iniciar con Windows** (`CheckMenuItem` id `autostart`): segundo item, antes del separador. Checked = autostart activo. Al toggle: lee/escrive `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (valor `CardynoxLauncher` = path del .exe actual entrecomillado) vía `winreg`. `is_autostart_enabled()` inicializa el checkmark al arrancar la bandeja.
+- **Menú final:** Ocultar/Mostrar → Iniciar con Windows → ───── → Opacidad → Tamaño → Color → Ocultar UI → Idioma → Activar SGDB → Cerrar.
+- **i18n:** `relabel_menu` traduce "Iniciar con Windows"/"Start with Windows"; `toggle_vis_label(lang, visible)` resuelve el label del toggle. Todo coherente con el esquema existente.
+- **Build:** limpio sin warnings. App corriendo (PID 26504).
+- **Archivos tocados:** `src-tauri/src/lib.rs`.
+- **Pendiente:** verificación visual del usuario: (1) toggle Ocultar/Mostrar funciona + cambia label; (2) clic izquierdo en ícono también actualiza el label; (3) "Iniciar con Windows" persiste tras reinicio de Windows; (4) i18n: los labels cambian al alternar Idioma.

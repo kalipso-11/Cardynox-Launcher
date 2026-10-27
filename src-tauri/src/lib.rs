@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{
-    menu::{CheckMenuItem, CheckMenuItemBuilder, IsMenuItem, Menu, MenuItem, Submenu},
+    menu::{CheckMenuItem, CheckMenuItemBuilder, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow, WebviewWindowBuilder,
     WebviewUrl, Wry,
@@ -1159,6 +1159,8 @@ async fn resolve_covers(
 /// Referencias a los ítems de la bandeja para actualizar checkmarks y
 /// re-etiquetar el menú en vivo al cambiar el idioma.
 struct MenuState {
+    toggle_vis: MenuItem<Wry>,
+    autostart: CheckMenuItem<Wry>,
     opacity: Vec<CheckMenuItem<Wry>>,
     size: Vec<CheckMenuItem<Wry>>,
     accent: Vec<CheckMenuItem<Wry>>,
@@ -1238,6 +1240,8 @@ fn apply_lang(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
     cfg.lang = code.clone();
     save_config(app, &cfg);
     relabel_menu(state, &code);
+    // El label de Ocultar/Mostrar depende del idioma + visibilidad: refrescar.
+    update_toggle_vis_label(state, app);
     // Payload: el código ("es" | "en").
     let _ = app.emit("cardynox:set-lang", code);
     for (i, item) in state.lang_items.iter().enumerate() {
@@ -1249,8 +1253,18 @@ fn apply_lang(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
 /// items de tamaño/color/ocultar-UI (las claves canónicas no cambian — solo el
 /// display se traduce) y los items de primer nivel. Los items de idioma,
 /// en cambio, siempre se muestran en su propio idioma (UX estándar).
+fn toggle_vis_label(lang: &str, visible: bool) -> String {
+    match (lang, visible) {
+        ("en", true) => "Hide".into(),
+        ("en", false) => "Show".into(),
+        (_, true) => "Ocultar".into(),
+        (_, false) => "Mostrar".into(),
+    }
+}
+
 fn relabel_menu(state: &MenuState, lang: &str) {
     let en = lang == "en";
+    state.autostart.set_text(if en { "Start with Windows" } else { "Iniciar con Windows" }).ok();
     state.op_submenu.set_text(if en { "Opacity" } else { "Opacidad" }).ok();
     state.size_submenu.set_text(if en { "Size" } else { "Tamaño" }).ok();
     state.accent_submenu.set_text("Color").ok();
@@ -1274,6 +1288,85 @@ fn relabel_menu(state: &MenuState, lang: &str) {
     }
     state.sgdb.set_text(if en { "Enable SGDB" } else { "Activar SGDB" }).ok();
     state.quit.set_text(if en { "Quit" } else { "Cerrar" }).ok();
+}
+
+// ---------------------------------------------------------------------------
+// Autostart (registro HKCU\...\Run)
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "windows")]
+fn is_autostart_enabled() -> bool {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let Ok(run) = hkcu.open_subkey(RUN_KEY) else { return false };
+    run.get_value::<String, &str>("CardynoxLauncher").is_ok()
+}
+
+#[cfg(target_os = "windows")]
+fn set_autostart(enabled: bool) -> Result<(), String> {
+    use winreg::enums::{KEY_SET_VALUE, HKEY_CURRENT_USER};
+    use winreg::RegKey;
+    const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let (run, _) = hkcu.create_subkey_with_flags(RUN_KEY, KEY_SET_VALUE)
+        .map_err(|e| e.to_string())?;
+    if enabled {
+        let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+        run.set_value("CardynoxLauncher", &format!("\"{}\"", exe_path.to_string_lossy()))
+            .map_err(|e| e.to_string())?;
+    } else {
+        let _ = run.delete_value("CardynoxLauncher");
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_autostart_enabled() -> bool { false }
+
+#[cfg(not(target_os = "windows"))]
+fn set_autostart(_enabled: bool) -> Result<(), String> { Err("no soportado".into()) }
+
+/// Actualiza el label del item Ocultar/Mostrar según visibilidad e idioma.
+fn update_toggle_vis_label(state: &MenuState, app: &tauri::AppHandle) {
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => return,
+    };
+    let visible = window.is_visible().unwrap_or(false);
+    let minimized = window.is_minimized().unwrap_or(false);
+    let cfg = load_config(app);
+    let label = toggle_vis_label(&cfg.lang, visible && !minimized);
+    state.toggle_vis.set_text(label).ok();
+}
+
+/// Oculta o muestra el gadget + actualiza el label del menú.
+fn do_toggle_visibility(app: &tauri::AppHandle, state: &MenuState) {
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => return,
+    };
+    let visible = window.is_visible().unwrap_or(false);
+    let minimized = window.is_minimized().unwrap_or(false);
+    if visible && !minimized {
+        let _ = window.hide();
+    } else {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    update_toggle_vis_label(state, app);
+}
+
+/// Alterna autostart y actualiza checkmark.
+fn do_autostart(_app: &tauri::AppHandle, state: &MenuState) {
+    let current = is_autostart_enabled();
+    let new_state = !current;
+    if let Err(e) = set_autostart(new_state) {
+        eprintln!("[cardynox] Autostart error: {e}");
+    }
+    let _ = state.autostart.set_checked(new_state);
 }
 
 /// Redimensiona la ventana y la recentra en su monitor (fallback: solo
@@ -1418,9 +1511,25 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+
+    // Item Ocultar/Mostrar (primer item del menú; el texto se actualiza dinámicamente).
+    let initial_vis_label = toggle_vis_label(&cfg.lang, true); // al arrancar siempre visible
+    let toggle_vis_item = MenuItem::with_id(app, "toggle-vis", initial_vis_label, true, None::<&str>)?;
+
+    // Item Iniciar con Windows (checkable; checked = autostart activo).
+    let auto_enabled = is_autostart_enabled();
+    let autostart_item = CheckMenuItemBuilder::with_id("autostart", "Iniciar con Windows")
+        .checked(auto_enabled)
+        .build(app)?;
+
+    let sep = PredefinedMenuItem::separator(app)?;
+
     let menu = Menu::with_items(
         app,
         &[
+            &toggle_vis_item as &dyn IsMenuItem<Wry>,
+            &autostart_item as &dyn IsMenuItem<Wry>,
+            &sep as &dyn IsMenuItem<Wry>,
             &op_submenu as &dyn IsMenuItem<Wry>,
             &size_submenu as &dyn IsMenuItem<Wry>,
             &accent_submenu as &dyn IsMenuItem<Wry>,
@@ -1434,6 +1543,8 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     // Estado compartido: el handler lo usa para los checkmarks y el
     // relabeling en vivo al cambiar de idioma.
     app.manage(MenuState {
+        toggle_vis: toggle_vis_item,
+        autostart: autostart_item,
         opacity: opacity_items,
         size: size_items,
         accent: accent_items,
@@ -1463,6 +1574,12 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| {
             let state = app.state::<MenuState>();
             match event.id.as_ref() {
+                "toggle-vis" => {
+                    do_toggle_visibility(app, &state);
+                }
+                "autostart" => {
+                    do_autostart(app, &state);
+                }
                 "quit" => {
                     app.exit(0);
                 }
@@ -1540,6 +1657,9 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 // La config siempreOnBottom:tao intercepta WM_WINDOWPOSCHANGING y
                 // devuelve la ventana al fondo del Z-order en cada cambio.
             }
+            // Mantiene el label del menú sincronizado con la visibilidad.
+            let state = app.state::<MenuState>();
+            update_toggle_vis_label(&state, app);
         })
         .build(app)?;
     Ok(())
