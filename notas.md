@@ -828,3 +828,10 @@
 - **Verificación:** `cargo check` limpio; sin cadenas visibles de UI sin traducir (busqueda exhaustiva); app relanzada (`cargo tauri dev`, log en /tmp/cardynox_dev.log) tras matar PID 9600.
 - **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/app.js`, `ui/index.html`, `ui/sgdb.html`, `ui/sgdb.js`.
 - **Pendiente:** verificación visual del usuario: (1) submenú "Idioma" con check en el activo; (2) cambio a EN traduce bandeja + gadget + textos dinámicos sin reiniciar; (3) ventana SGDB en inglés si se abre con lang=en (y cambia en vivo); (4) persistencia tras reinicio. El release de 2026-10-24 sigue **stale** — re-build si se quiere distribuir.
+
+## 2026-10-27 — Ícono de bandeja: "C" moderna
+- **Pedido del usuario:** cambiar el ícono de la bandeja por una C moderna.
+- **Diseño (PIL, generado proceduralmente a 1024px):** tile redondeado (radius ~23% del lado) con gradiente diagonal violeta #6d28d9 → #a78bfa + borde superior blanco al 27% de alpha (highlight de volumen). La "C" es un anillo blanco grueso (radio 300, grosor 132, apertura a la derecha 42°–318°) con **caps redondos** en los extremos y centro desplazado ~20px a la derecha para centrado óptico. Coherente con el acento violeta del gadget.
+- **Aplicación:** la bandeja usa `app.default_window_icon()` (`setup_tray`, lib.rs), que es el ícono embebido por tauri-build desde `bundle.icon` → bastó reemplazar los archivos: `src-tauri/icons/32x32.png`, `128x128.png`, `icon.png` y **`icon.ico`** (multi-resolución 16/24/32/48/64/128/256 — es el que Windows embebe en el .exe). Cero cambios de código. También actualiza el ícono del .exe en Explorer.
+- **Rebuild forzado:** `cargo clean -p cardynox-launcher` + relanzar dev (el watcher no re-embebe íconos al cambiar solo archivos de icons/). App corriendo (PID 14884).
+- **Pendiente:** verificación visual del usuario en la bandeja. Si Windows mostrara el ícono viejo cacheado un rato, se soluciona ocultando/mostrando el ícono en el área de notificación (o al reiniciar Explorer). El release de 2026-10-24 sigue stale — el próximo build lo trae.
