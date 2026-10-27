@@ -835,3 +835,8 @@
 - **Aplicación:** la bandeja usa `app.default_window_icon()` (`setup_tray`, lib.rs), que es el ícono embebido por tauri-build desde `bundle.icon` → bastó reemplazar los archivos: `src-tauri/icons/32x32.png`, `128x128.png`, `icon.png` y **`icon.ico`** (multi-resolución 16/24/32/48/64/128/256 — es el que Windows embebe en el .exe). Cero cambios de código. También actualiza el ícono del .exe en Explorer.
 - **Rebuild forzado:** `cargo clean -p cardynox-launcher` + relanzar dev (el watcher no re-embebe íconos al cambiar solo archivos de icons/). App corriendo (PID 14884).
 - **Pendiente:** verificación visual del usuario en la bandeja. Si Windows mostrara el ícono viejo cacheado un rato, se soluciona ocultando/mostrando el ícono en el área de notificación (o al reiniciar Explorer). El release de 2026-10-24 sigue stale — el próximo build lo trae.
+
+## 2026-10-27 — Ícono: fondo azul (variante del anterior)
+- **Pedido del usuario:** cambiar el fondo del ícono a azul (misma "C", mismo diseño).
+- **Cambio:** solo los colores del gradiente del tile → #1d4ed8 (azul profundo) → #60a5fa (azul claro). Misma geometría (tile redondeado, highlight blanco, anillo-C con caps, centrado óptico). Mismo procedimiento: regenerar PNG/ICO (PIL), sobrescribir `src-tauri/icons/`, `cargo clean -p cardynox-launcher` + relanzar dev. App corriendo (PID 3316).
+- **Nota:** el acento del GADGET sigue siendo violeta (menú "Color" de la bandeja) — solo el ícono de bandeja/exe es azul. Si el usuario quiere coherencia total, hay que cambiar también el color por defecto en Rust/CSS.
