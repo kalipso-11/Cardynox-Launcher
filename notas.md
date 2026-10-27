@@ -840,3 +840,9 @@
 - **Pedido del usuario:** cambiar el fondo del ícono a azul (misma "C", mismo diseño).
 - **Cambio:** solo los colores del gradiente del tile → #1d4ed8 (azul profundo) → #60a5fa (azul claro). Misma geometría (tile redondeado, highlight blanco, anillo-C con caps, centrado óptico). Mismo procedimiento: regenerar PNG/ICO (PIL), sobrescribir `src-tauri/icons/`, `cargo clean -p cardynox-launcher` + relanzar dev. App corriendo (PID 3316).
 - **Nota:** el acento del GADGET sigue siendo violeta (menú "Color" de la bandeja) — solo el ícono de bandeja/exe es azul. Si el usuario quiere coherencia total, hay que cambiar también el color por defecto en Rust/CSS.
+
+## 2026-10-27 — Ícono: fondo azul oscuro (variante final)
+- **Pedido del usuario:** "cambialo para que sea un azul oscuro el fondo".
+- **Cambio:** gradiente del tile → `#1e3a8a` (azul oscuro) → `#2563eb` (azul medio, brillo diagonal). Misma geometría (tile redondeado, highlight, anillo-C con caps, centrado óptico). Mismo procedimiento: PIL 1024 → PNG/ICO → sobrescribir `src-tauri/icons/` → `cargo clean -p` + dev.
+- **App corriendo:** PID 25444. Build limpio 11.7s.
+- **Pendiente:** verificación visual del usuario (bandeja). Caché de íconos Windows: si no cambia al instante, ocultar/mostrar el ícono en el área de notificación. Oferta pendiente (no aprobada): cambiar acento default del gadget a azul para coherencia con el ícono.
