@@ -204,9 +204,24 @@ body.browser-preview {
 
 /* ---------- Escenario / carrusel ---------- */
 
+/* Reparte el espacio libre del gadget en dos mitades simétricas:
+   arriba de las portadas (.stage-spacer) y abajo, donde vive el nombre
+   (.name-band). El carrusel queda centrado igual que antes y el nombre
+   cae exactamente en el medio vertical entre portadas y botones, sin
+   píxeles hardcodeados: la simetría la garantiza el propio flexbox. */
+.stage-spacer { flex: 1 1 0; min-height: 0; }
+.name-band {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Alto fijo = alto de la tarjeta: el stage ya no absorbe espacio libre. */
 #stage {
   position: relative;
-  flex: 1;
+  flex: none;
+  height: var(--card-h);
   perspective: 900px;
 }
 
@@ -306,6 +321,7 @@ body.browser-preview {
 
 #active-name {
   flex: none;
+  width: 100%;
   text-align: center;
   font-size: 13px;
   font-weight: 600;

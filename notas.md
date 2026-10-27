@@ -806,3 +806,14 @@
 - **Verificación:** build debug limpio sin warnings. App relanzada (PID 27512 al cierre de esta entrada).
 - **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/app.js`.
 - **Pendiente:** (1) verificación visual del usuario: los 4 toggles funcionan en vivo y persisten; (2) items viejos: card-pan al soltar drag; release stale (sin Color ni Ocultar UI) — re-build si se distribuye.
+
+## 2026-10-27 — Nombre del juego centrado entre portadas y botones (reestructuración flex)
+- **Pedido del usuario:** el nombre (arriba de los botones) debe ir más arriba: en el medio vertical entre las portadas del carrusel y la fila de 3 botones.
+- **Cambio estructural, sin píxeles hardcodeados** (`ui/index.html` + `ui/styles.css`):
+  - El problema: `#stage` era `flex:1` y absorbía TODO el espacio libre; la tarjeta se centra dentro (top:50% + margen negativo) pero el nombre vivía en flujo pegado al pie del stage → se veía abajo, no en el medio.
+  - Solución: repartir el espacio libre en dos mitades simétricas con flexbox. `#stage` ahora `flex:none; height: var(--card-h)` (180px, exacto a la tarjeta). Nuevo `<div class="stage-spacer">` (`flex:1`) ANTES del stage y `<div class="name-band">` (`flex:1; display:flex; align-items:center`) envuelve el `#active-name` DESPUÉS. Resultado: la tarjeta queda a ~1px de su posición anterior (el centro geométrico no cambia) y el nombre cae EXACTAMENTE en el punto medio entre el pie de la portada y el tope de los botones, por construcción (los dos flex:1 se reparten el libre 50/50). Robusto a cambios de tamaño/padding: la propiedad "centrado en la banda inferior" se mantiene sola.
+  - `#active-name` ganó `width:100%` (dentro de la fila flex name-band sigue ocupando todo el ancho → elipsis intacta; ya traía overflow:hidden que habilita el shrink).
+- **Verificado:** JS no lee dimensiones del stage (solo `stage.prepend(card)`; offsets del carrusel son px fijos relativos al centro CSS) → reestructuración segura. Build limpio sin warnings, app corriendo (PID 9600).
+- **Cambio colateral menor:** las zonas vacías arriba/abajo de la tarjeta ya no pertenecen a `#stage` (están en spacer/name-band), por ahí NO se arrastra la ventana (antes sí, región bare). La manija de arrastre sigue funcionando igual.
+- **Archivos tocados:** `ui/index.html`, `ui/styles.css`. Cero Rust, cero JS.
+- **Pendiente:** verificación visual del usuario (nombre en el medio; portadas sin mover).

@@ -27,11 +27,16 @@
       </div>
     </div>
 
+    <!-- Spacer flex: mitad del espacio libre, arriba de las portadas.
+         (name-band lleva la otra mitad; juntos mantienen el carrusel centrado
+         y dejan al nombre en el medio entre portadas y botones). -->
+    <div class="stage-spacer"></div>
+
     <main id="stage" aria-label="Carrusel de juegos" data-tauri-drag-region>
       <!-- Las tarjetas se generan desde app.js -->
     </main>
 
-    <h2 id="active-name"></h2>
+    <div class="name-band"><h2 id="active-name"></h2></div>
 
     <nav class="actions">
       <button id="btn-details"><span class="ic">ⓘ</span><span>Detalles</span></button>
