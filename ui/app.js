@@ -47,6 +47,231 @@ const activeName = document.getElementById("active-name");
 const statusEl = document.getElementById("status");
 
 // ---------------------------------------------------------------------------
+// i18n — español / inglés (submenú "Idioma" de la bandeja; persiste en
+// config.lang). Los labels canónicos de origen (sourceLabel) NO se traducen:
+// son claves estables para hiddenPlatforms/platformRank. Solo el display se
+// traduce vía displaySource().
+// ---------------------------------------------------------------------------
+
+const I18N = {
+  es: {
+    dragTitle: "Arrastrar la ventana",
+    filterTitle: "Ordenar y filtrar por plataforma",
+    filterAria: "Ordenar y filtrar juegos",
+    searchPh: "Buscar juegos…",
+    carouselAria: "Carrusel de juegos",
+    btnDetails: "Detalles",
+    btnPlay: "Jugar",
+    btnAdd: "Agregar",
+    addTitle: "Agregar un juego manualmente",
+    loading: "Cargando…",
+    saving: "Guardando…",
+    noResults: "Sin resultados",
+    fpSort: "Ordenar",
+    fpAlpha: "Alfabético",
+    fpPlatform: "Por plataforma",
+    fpPlatforms: "Plataformas",
+    closeDetailsTitle: "Cerrar (Esc)",
+    closeDetailsAria: "Cerrar detalles",
+    closeAddAria: "Cerrar",
+    coverAlt: "Portada",
+    changeCoverTitle: "Elegir imagen o GIF local",
+    btnChangeCover: "🖼 Cambiar portada",
+    btnRemoveCustomCover: "Quitar personalizada",
+    lblSource: "Origen",
+    lblVisibleName: "Nombre visible",
+    saveNameTitle: "Guardar nombre",
+    lblInstallPath: "Ruta de instalación",
+    btnOpenFolder: "📂 Abrir carpeta",
+    btnChangeGamePath: "✎ Cambiar ruta de juego",
+    lblLaunchArgs: "Argumentos de lanzamiento",
+    saveArgsTitle: "Guardar argumentos",
+    argsHint: "Se pasan al .exe al ejecutarlo.",
+    lblDiskSize: "Tamaño en disco",
+    steamDataH: "Datos de Steam",
+    lblAchievements: "🏆 Logros:",
+    lblTime: "⏱ Tiempo:",
+    lblLastPlayed: "🕐 Última sesión:",
+    noLocalData: "Sin datos locales disponibles.",
+    btnRemoveFromLauncher: "Quitar del launcher",
+    removeTitle: "Sacar este juego del launcher (no lo desinstala)",
+    confirmYes: "Sí, quitar",
+    cancelBtn: "Cancelar",
+    addGameH: "Agregar juego",
+    addNamePh: "Nombre del juego",
+    lblExe: "Ejecutable (.exe)",
+    notSelected: "No seleccionado",
+    btnPickExe: "📂 Elegir ejecutable del juego",
+    addHint: "El nombre visible se completa con el nombre del ejecutable, pero podés cambiarlo.",
+    btnAddConfirm: "Agregar",
+    btnPickCover: "🖼 Elegir portada",
+    btnRemoveCover: "Quitar portada",
+    srcOther: "Otros",
+    srcCustom: "Manual",
+    gamesWord: "juegos",
+    matchesSearch: "{n} de {total} coinciden con “{q}”",
+    removingGame: "¿Seguro que querés quitar “{name}” del launcher? No se desinstala: solo deja de aparecer.",
+    removedGame: "“{name}” quitado del launcher.",
+    removeErr: "Error al quitar el juego: {err}",
+    launching: "Lanzando “{name}”…",
+    browserPlay: "(browser) Lanzamiento solo disponible dentro de Tauri.",
+    coverUpdated: "Portada actualizada para “{name}”.",
+    coverSaveErr: "Error al guardar portada: {err}",
+    coverRemoved: "Portada personalizada eliminada.",
+    coverRemoveErr: "Error al quitar portada: {err}",
+    renameErr: "Error renombrando: {err}",
+    argsSaved: "Argumentos guardados para “{name}”.",
+    argsSaveErr: "Error al guardar argumentos: {err}",
+    pathUpdated: "Ruta actualizada: “{name}”.",
+    pathChangeErr: "Error al cambiar la ruta: {err}",
+    pickerErr: "No se pudo abrir el selector: {err}",
+    imgReadErr: "No se pudo leer la imagen.",
+    fmtErr: "Formato no soportado. Usá PNG, JPG, GIF o WebP.",
+    addedGame: "“{name}” agregado al launcher.",
+    alreadyIn: "“{name}” ya estaba en el launcher.",
+    addErr: "Error al agregar: {err}",
+  },
+  en: {
+    dragTitle: "Drag the window",
+    filterTitle: "Sort and filter by platform",
+    filterAria: "Sort and filter games",
+    searchPh: "Search games…",
+    carouselAria: "Games carousel",
+    btnDetails: "Details",
+    btnPlay: "Play",
+    btnAdd: "Add",
+    addTitle: "Add a game manually",
+    loading: "Loading…",
+    saving: "Saving…",
+    noResults: "No results",
+    fpSort: "Sort",
+    fpAlpha: "Alphabetical",
+    fpPlatform: "By platform",
+    fpPlatforms: "Platforms",
+    closeDetailsTitle: "Close (Esc)",
+    closeDetailsAria: "Close details",
+    closeAddAria: "Close",
+    coverAlt: "Cover",
+    changeCoverTitle: "Pick a local image or GIF",
+    btnChangeCover: "🖼 Change cover",
+    btnRemoveCustomCover: "Remove custom",
+    lblSource: "Source",
+    lblVisibleName: "Display name",
+    saveNameTitle: "Save name",
+    lblInstallPath: "Install path",
+    btnOpenFolder: "📂 Open folder",
+    btnChangeGamePath: "✎ Change game path",
+    lblLaunchArgs: "Launch arguments",
+    saveArgsTitle: "Save arguments",
+    argsHint: "Passed to the .exe at launch.",
+    lblDiskSize: "Disk size",
+    steamDataH: "Steam data",
+    lblAchievements: "🏆 Achievements:",
+    lblTime: "⏱ Time played:",
+    lblLastPlayed: "🕐 Last session:",
+    noLocalData: "No local data available.",
+    btnRemoveFromLauncher: "Remove from launcher",
+    removeTitle: "Take this game out of the launcher (it does not uninstall it)",
+    confirmYes: "Yes, remove",
+    cancelBtn: "Cancel",
+    addGameH: "Add game",
+    addNamePh: "Game name",
+    lblExe: "Executable (.exe)",
+    notSelected: "Not selected",
+    btnPickExe: "📂 Pick the game executable",
+    addHint: "The display name is filled from the executable name, but you can change it.",
+    btnAddConfirm: "Add",
+    btnPickCover: "🖼 Pick cover",
+    btnRemoveCover: "Remove cover",
+    srcOther: "Other",
+    srcCustom: "Manual",
+    gamesWord: "games",
+    matchesSearch: "{n} of {total} match “{q}”",
+    removingGame: "Are you sure you want to remove “{name}” from the launcher? It will not be uninstalled: it just stops appearing.",
+    removedGame: "“{name}” removed from the launcher.",
+    removeErr: "Failed to remove game: {err}",
+    launching: "Launching “{name}”…",
+    browserPlay: "(browser) Launching is only available inside Tauri.",
+    coverUpdated: "Cover updated for “{name}”.",
+    coverSaveErr: "Failed to save cover: {err}",
+    coverRemoved: "Custom cover removed.",
+    coverRemoveErr: "Failed to remove cover: {err}",
+    renameErr: "Rename failed: {err}",
+    argsSaved: "Arguments saved for “{name}”.",
+    argsSaveErr: "Failed to save arguments: {err}",
+    pathUpdated: "Path updated: “{name}”.",
+    pathChangeErr: "Failed to change path: {err}",
+    pickerErr: "Could not open the file picker: {err}",
+    imgReadErr: "Could not read the image.",
+    fmtErr: "Unsupported format. Use PNG, JPG, GIF or WebP.",
+    addedGame: "“{name}” added to the launcher.",
+    alreadyIn: "“{name}” was already in the launcher.",
+    addErr: "Failed to add: {err}",
+  },
+};
+
+let lang = "es"; // idioma actual (persistido por la bandeja en config.lang)
+
+function t(key) {
+  const d = I18N[lang] || I18N.es;
+  return key in d ? d[key] : key;
+}
+
+/** Traduce una plantilla con placeholders {name} / {err} / {n} / {total} / {q}. */
+function tf(template, vars) {
+  let s = t(template);
+  for (const [k, v] of Object.entries(vars)) s = s.split("{" + k + "}").join(String(v));
+  return s;
+}
+
+/** Traducción de display de un label canónico de origen. Steam/Epic/GOG… no cambian. */
+function displaySource(label) {
+  if (label === "Otros") return t("srcOther");
+  if (label === "Manual") return t("srcCustom");
+  return label;
+}
+
+/** Aplica el idioma: estáticos vía data-i18n* + contenido dinámico. */
+function applyLang(l) {
+  lang = I18N[l] ? l : "es";
+  document.documentElement.lang = lang;
+  for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll("[data-i18n-ph]")) el.placeholder = t(el.dataset.i18nPh);
+  for (const el of document.querySelectorAll("[data-i18n-title]")) el.title = t(el.dataset.i18nTitle);
+  for (const el of document.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", t(el.dataset.i18nAria));
+  for (const el of document.querySelectorAll("[data-i18n-alt]")) el.alt = t(el.dataset.i18nAlt);
+  refreshDynamicText();
+}
+
+/** Re-renderiza el contenido dinámico (footer, nombre activo, labels de las
+    tarjetas y paneles/overlays abiertos) en el idioma actual. */
+function refreshDynamicText() {
+  if (searchInput.value.trim()) updateSearchStatus();
+  else setStatus(baseStatus(), false);
+  const current = filtered[active];
+  activeName.textContent = current ? current.name : t("noResults");
+  // Label de origen al pie de cada portada.
+  for (const [id, card] of cardEls) {
+    const g = games.find((x) => x.id === id);
+    if (!g) continue;
+    card.querySelector(".card-src").textContent = displaySource(sourceLabel(g));
+  }
+  // Si el panel de filtro está abierto → redesenha los checkboxes traducidos.
+  const p = document.getElementById("filter-panel");
+  if (p && !p.hidden) renderPlatformChecks();
+  // Si Detalles está abierto → origen + confirmación inline (si se muestra).
+  if (detailsGame && !document.getElementById("details-overlay").hidden) {
+    const srcEl = document.getElementById("dt-source");
+    if (srcEl) srcEl.textContent = displaySource(sourceLabel(detailsGame));
+    if (!document.getElementById("dt-remove-confirm").hidden) showRemoveConfirm();
+  }
+  // Si Agregar está abierto → restaura la ruta elegida (si hay).
+  if (!document.getElementById("add-overlay").hidden) {
+    document.getElementById("add-path").textContent = addExe || t("notSelected");
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------------
 
@@ -99,8 +324,8 @@ function baseStatus() {
     const key = sourceLabel(g);
     counts[key] = (counts[key] || 0) + 1;
   }
-  const parts = Object.entries(counts).map(([src, n]) => `${n} ${src}`);
-  return `${games.length} juegos · ${parts.join(" · ")}`;
+  const parts = Object.entries(counts).map(([src, n]) => `${n} ${displaySource(src)}`);
+  return `${games.length} ${t("gamesWord")} · ${parts.join(" · ")}`;
 }
 
 function setStatus(text, flash) {
@@ -187,12 +412,15 @@ function initGadgetConfig() {
       applyOpacity(cfg.opacity);
       applyAccent(cfg.accent);
       applyAllUiHidden(cfg.hidden_ui);
+      applyLang(cfg.lang || "es");
     })
     .catch((err) => console.error("get_gadget_config falló:", err));
   tauri.event.listen("cardynox:set-opacity", (e) => applyOpacity(e.payload));
   tauri.event.listen("cardynox:set-accent", (e) => applyAccent(e.payload));
   // Payload del toggle de la bandeja: [índice, oculto].
   tauri.event.listen("cardynox:set-ui-hidden", (e) => applyUiHidden(e.payload[0], e.payload[1]));
+  // Cambio de idioma desde el submenú "Idioma" de la bandeja (payload: "es"|"en").
+  tauri.event.listen("cardynox:set-lang", (e) => applyLang(e.payload));
 }
 
 /** Resuelve portadas automáticas para juegos no-Steam que aún no la tienen.
@@ -286,7 +514,7 @@ function buildCards() {
     // Etiqueta chica de origen (Steam/Epic/…/Otros) al pie de la portada.
     const srcEl = document.createElement("div");
     srcEl.className = "card-src";
-    srcEl.textContent = sourceLabel(game);
+    srcEl.textContent = displaySource(sourceLabel(game));
 
     card.append(img, fallback, sheen, srcEl);
 
@@ -490,7 +718,7 @@ function renderPlatformChecks() {
       applyFilter();
     });
     const name = document.createElement("span");
-    name.textContent = l;
+    name.textContent = displaySource(l);
     const cnt = document.createElement("span");
     cnt.className = "fp-count";
     cnt.textContent = String(counts[l]);
@@ -522,7 +750,7 @@ function closeFilterPanel() {
 function updateSearchStatus() {
   const q = searchInput.value.trim();
   if (!q) { setStatus(baseStatus(), false); return; }
-  setStatus(`${filtered.length} de ${games.length} coinciden con “${q}”`, filtered.length > 0);
+  setStatus(tf("matchesSearch", { n: filtered.length, total: games.length, q }), filtered.length > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -652,7 +880,7 @@ function bindEvents() {
     const file = e.target.files?.[0];
     if (!file || !detailsGame) return;
     if (!/image\/(png|jpeg|gif|webp)/.test(file.type)) {
-      setStatus("Formato no soportado. Usá PNG, JPG, GIF o WebP.", true);
+      setStatus(t("fmtError"), true);
       e.target.value = "";
       return;
     }
@@ -686,9 +914,9 @@ function bindEvents() {
         card.classList.remove("no-art");
         applyCardPan(detailsGame, card); // el paneo viejo ya se borró → centro
       }
-      setStatus(`Portada actualizada para “${detailsGame.name}”.`, true);
+      setStatus(tf("coverUpdated", { name: detailsGame.name }), true);
     } catch (err) {
-      setStatus(`Error al guardar portada: ${err}`, true);
+      setStatus(tf("coverSaveError", { err }), true);
     }
     e.target.value = "";
   });
@@ -734,9 +962,9 @@ function bindEvents() {
           card.classList.add("no-art");
         }
       }
-      setStatus(`Portada personalizada eliminada.`, true);
+      setStatus(t("coverRemoved"), true);
     } catch (err) {
-      setStatus(`Error al quitar portada: ${err}`, true);
+      setStatus(tf("coverRemoveError", { err }), true);
     }
   });
 
@@ -758,7 +986,7 @@ async function playActive() {
   const game = filtered[active];
   if (!game) return;
   if (!invoke) {
-    setStatus("(browser) Lanzamiento solo disponible dentro de Tauri.", true);
+    setStatus(t("browserPlay"), true);
     return;
   }
   try {
@@ -769,7 +997,7 @@ async function playActive() {
       installDir: game.installDir ?? null,
       args: argsMap[game.id] || null,
     });
-    setStatus(`Lanzando “${game.name}”…`, true);
+    setStatus(tf("launching", { name: game.name }), true);
   } catch (err) {
     setStatus(String(err), true);
   }
@@ -816,7 +1044,7 @@ function showDetails() {
   // Origen / fuente.
   const srcEl = document.getElementById("dt-source");
   if (srcEl) {
-    srcEl.textContent = sourceLabel(game);
+    srcEl.textContent = displaySource(sourceLabel(game));
     srcEl.hidden = false;
   }
 
@@ -983,7 +1211,7 @@ async function saveRename() {
     btn.classList.add("saved");
     setTimeout(() => btn.classList.remove("saved"), 1200);
   } catch (err) {
-    setStatus(`Error renombrando: ${err}`, true);
+    setStatus(tf("renameError", { err }), true);
   }
 }
 
@@ -994,12 +1222,12 @@ async function saveLaunchArgs() {
   try {
     await invoke("set_launch_args", { id: detailsGame.id, args: val });
     if (val) argsMap[detailsGame.id] = val; else delete argsMap[detailsGame.id];
-    setStatus(`Argumentos guardados para “${detailsGame.name}”.`, true);
+    setStatus(tf("argsSaved", { name: detailsGame.name }), true);
     const btn = document.getElementById("dt-args-save");
     btn.classList.add("saved");
     setTimeout(() => btn.classList.remove("saved"), 1200);
   } catch (err) {
-    setStatus(`Error al guardar argumentos: ${err}`, true);
+    setStatus(tf("argsSaveError", { err }), true);
   }
 }
 
@@ -1007,7 +1235,7 @@ async function saveLaunchArgs() {
 function showRemoveConfirm() {
   if (!detailsGame) return;
   const text = document.getElementById("dt-remove-confirm-text");
-  text.textContent = `¿Seguro que querés quitar “${detailsGame.name}” del launcher? No se desinstala: solo deja de aparecer.`;
+  text.textContent = tf("removingGame", { name: detailsGame.name });
   document.getElementById("dt-remove-game").hidden = true;
   document.getElementById("dt-remove-confirm").hidden = false;
 }
@@ -1030,9 +1258,9 @@ async function confirmRemoveGame() {
     hideDetails();
     buildCards();
     layout();
-    setStatus(`“${name}” quitado del launcher.`, true);
+    setStatus(tf("removedGame", { name }), true);
   } catch (err) {
-    setStatus(`Error al quitar el juego: ${err}`, true);
+    setStatus(tf("removeError", { err }), true);
   }
 }
 
@@ -1051,12 +1279,12 @@ async function applyExe(exe) {
     // Caja unificada: la ruta completa (con el nuevo .exe) queda a la vista.
     document.getElementById("dt-path").textContent = exe;
     document.getElementById("dt-open-folder").disabled = false;
-    setStatus(`Ruta actualizada: “${detailsGame.name}”.`, true);
+    setStatus(tf("pathUpdated", { name: detailsGame.name }), true);
     const btn = document.getElementById("dt-change-path");
     btn.classList.add("saved");
     setTimeout(() => btn.classList.remove("saved"), 1200);
   } catch (err) {
-    setStatus(`Error al cambiar la ruta: ${err}`, true);
+    setStatus(tf("pathChangeError", { err }), true);
   }
 }
 
@@ -1067,7 +1295,7 @@ async function pickAndSetExe() {
     const exe = await invoke("pick_exe"); // ruta, o null si se canceló.
     if (exe) await applyExe(exe);
   } catch (err) {
-    setStatus(`No se pudo abrir el selector: ${err}`, true);
+    setStatus(tf("pickerError", { err }), true);
   }
 }
 
@@ -1086,7 +1314,12 @@ function formatHours(h) {
 
 function formatDate(epoch) {
   const d = new Date(epoch * 1000);
-  return d.toLocaleDateString("es-AR", { year: "numeric", month: "short", day: "numeric" });
+  // Locale acorde al idioma activo de la UI (es-AR por defecto).
+  return d.toLocaleDateString(lang === "en" ? "en-US" : "es-AR", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1100,7 +1333,7 @@ function openAddOverlay() {
   addExe = null;
   addCoverDataUrl = null;
   document.getElementById("add-name").value = "";
-  document.getElementById("add-path").textContent = "No seleccionado";
+  document.getElementById("add-path").textContent = t("notSelected");
   const img = document.getElementById("add-art-img");
   img.style.display = "none";
   img.removeAttribute("src");
@@ -1149,7 +1382,7 @@ async function pickAddExe() {
     const exe = await invoke("pick_exe"); // ruta, o null si se canceló.
     if (exe) setAddExe(exe);
   } catch (err) {
-    setStatus(`No se pudo abrir el selector: ${err}`, true);
+    setStatus(tf("pickerError", { err }), true);
   }
 }
 
@@ -1158,7 +1391,7 @@ function onAddCoverFile(e) {
   const file = e.target.files?.[0];
   if (!file) return;
   if (!/image\/(png|jpeg|gif|webp)/.test(file.type)) {
-    setStatus("Formato no soportado. Usá PNG, JPG, GIF o WebP.", true);
+    setStatus(t("fmtError"), true);
     e.target.value = "";
     return;
   }
@@ -1171,7 +1404,7 @@ function onAddCoverFile(e) {
     document.getElementById("add-art-fallback").classList.add("hidden");
     document.getElementById("add-reset-cover").hidden = false;
   };
-  reader.onerror = () => setStatus("No se pudo leer la imagen.", true);
+  reader.onerror = () => setStatus(t("imgReadError"), true);
   reader.readAsDataURL(file);
   e.target.value = "";
 }
@@ -1195,7 +1428,7 @@ async function confirmAddGame() {
   if (!name) return; // el botón ya viene deshabilitado; por seguridad.
   const btn = document.getElementById("add-confirm");
   btn.disabled = true;
-  setStatus("Guardando…", false);
+  setStatus(t("saving"), false);
   try {
     const game = await invoke("add_game", { name, exe: addExe });
 
@@ -1222,15 +1455,15 @@ async function confirmAddGame() {
     const idx = filtered.findIndex((g) => g.id === game.id);
     if (idx >= 0) {
       setActive(idx); // centra en el juego agregado
-      setStatus(`“${game.name}” agregado al launcher.`, true);
+      setStatus(tf("addedGame", { name: game.name }), true);
     } else {
       // El escáner ya lo tenía bajo otro id (dedup por .exe o nombre).
       layout();
-      setStatus(`“${name}” ya estaba en el launcher.`, true);
+      setStatus(tf("alreadyIn", { name }), true);
     }
     closeAddOverlay();
   } catch (err) {
-    setStatus(`Error al agregar: ${err}`, true);
+    setStatus(tf("addError", { err }), true);
     updateAddConfirm(); // deja el botón en su estado correcto para reintentar
   }
 }

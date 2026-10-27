@@ -10,62 +10,60 @@
   <div id="sgdb">
     <header class="sgdb-head">
       <h1>SteamGridDB</h1>
-      <p class="sub">Configuración de carátulas automáticas</p>
+      <p class="sub" data-i18n="sub">Configuración de carátulas automáticas</p>
     </header>
 
     <section class="card">
-      <h2>¿Para qué sirve?</h2>
+      <h2 data-i18n="whyH">¿Para qué sirve?</h2>
       <p>
-        SteamGridDB es una base de datos comunitaria de carátulas y arte de juegos.
-        En Cardynox funciona como fuente <strong>secundaria</strong>: cuando un juego
-        <em>no</em> está en tu biblioteca de Steam y el buscador del store (que no
-        requiere key) tampoco lo encuentra, SGDB busca su portada vertical para
-        mostrarla en la tarjeta.
+        <span data-i18n="whyA">SteamGridDB es una base de datos comunitaria de carátulas y arte de juegos. En Cardynox funciona como fuente</span>
+        <strong><span data-i18n="whyB">secundaria</span></strong><span data-i18n="whyC">: cuando un juego</span>
+        <em><span data-i18n="whyD">no</span></em><span data-i18n="whyE">está en tu biblioteca de Steam y el buscador del store (que no requiere key) tampoco lo encuentra, SGDB busca su portada vertical para mostrarla en la tarjeta.</span>
       </p>
-      <p class="muted">
+      <p class="muted" data-i18n="whyMuted">
         Es opcional. Los juegos de Steam ya traen su portada; SGDB solo completa
         las que les faltan a los demás.
       </p>
     </section>
 
     <section class="card">
-      <h2>Cómo crear tu key</h2>
+      <h2 data-i18n="howH">Cómo crear tu key</h2>
       <ol>
         <li>
-          Creá una cuenta gratuita en
-          <a data-external href="https://www.steamgriddb.com">steamgriddb.com</a>.
+          <span data-i18n="step1a">Creá una cuenta gratuita en</span>
+          <a data-external href="https://www.steamgriddb.com">steamgriddb.com</a><span data-i18n="step1b">.</span>
         </li>
         <li>
-          Después de crear la cuenta, entrá a
+          <span data-i18n="step2a">Después de crear la cuenta, entrá a</span>
           <a data-external href="https://www.steamgriddb.com/profile/preferences/api">/profile/preferences/api</a>
-          para generar y ver tu API key.
+          <span data-i18n="step2b">para generar y ver tu API key.</span>
         </li>
-        <li>Copiala y pegala abajo.</li>
+        <li><span data-i18n="step3">Copiala y pegala abajo.</span></li>
       </ol>
       <p class="muted">
-        Límite del plan gratuito: ~500 peticiones por hora. El launcher hace muy
-        pocas consultas y guarda caché local, así que sobra holgura. La key se
-        guarda <strong>solo</strong> en tu equipo (carpeta de configuración) y nunca se distribuye.
+        <span data-i18n="limitsA">Límite del plan gratuito: ~500 peticiones por hora. El launcher hace muy pocas consultas y guarda caché local, así que sobra holgura. La key se guarda</span>
+        <strong><span data-i18n="onlyWord">solo</span></strong><span data-i18n="limitsB">en tu equipo (carpeta de configuración) y nunca se distribuye.</span>
       </p>
     </section>
 
     <section class="card">
-      <div id="status" class="status off">SGDB desactivado</div>
+      <div id="status" class="status off" data-i18n="statusOff">SGDB desactivado</div>
       <label for="key-input">API key</label>
       <div class="input-row">
         <input
           type="password"
           id="key-input"
           spellcheck="false"
+          data-i18n-ph="keyPh"
           placeholder="Pegá tu API key de SteamGridDB"
           autocomplete="off"
         />
-        <button id="toggle-vis" title="Mostrar / ocultar">👁</button>
+        <button id="toggle-vis" data-i18n-title="toggleTitle" title="Mostrar / ocultar">👁</button>
       </div>
       <div class="btn-row">
-        <button id="btn-save" class="primary">Guardar y activar</button>
-        <button id="btn-test" class="ghost">Probar</button>
-        <button id="btn-disable" class="ghost">Desactivar</button>
+        <button id="btn-save" class="primary" data-i18n="btnSave">Guardar y activar</button>
+        <button id="btn-test" class="ghost" data-i18n="btnTest">Probar</button>
+        <button id="btn-disable" class="ghost" data-i18n="btnDisable">Desactivar</button>
       </div>
       <p id="result" class="result" role="status"></p>
     </section>

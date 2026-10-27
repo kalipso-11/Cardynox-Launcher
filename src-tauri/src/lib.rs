@@ -413,28 +413,46 @@ fn set_sgdb_key(key: String, app: tauri::AppHandle) -> Result<(), String> {
 
 /// Prueba la key contra la API reusando el endpoint autocomplete de SGDB.
 /// 2xx = válida; 401/403 = inválida. Totalmente defensivo.
+/// `lang` traduce los mensajes de resultado ("en" | "es"); None → español.
 #[tauri::command]
-async fn check_sgdb_key(key: String) -> Result<String, String> {
+async fn check_sgdb_key(key: String, lang: Option<String>) -> Result<String, String> {
     let k = key.trim().to_string();
+    let en = lang.as_deref() == Some("en");
     if k.is_empty() {
-        return Err("Pegá una API key primero".into());
+        return Err(if en {
+            "Paste an API key first".into()
+        } else {
+            "Pegá una API key primero".into()
+        });
     }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .user_agent("cardynox-launcher/0.1")
         .build()
-        .map_err(|e| format!("Sin cliente HTTP: {e}"))?;
+        .map_err(|e| format!("{}: {e}", if en { "No HTTP client" } else { "Sin cliente HTTP" }))?;
     // Término común: solo evalúo el estado HTTP para validar la key.
     let resp = client
         .get("https://www.steamgriddb.com/api/v2/search/autocomplete/elden")
         .header("Authorization", format!("Bearer {k}"))
         .send()
         .await
-        .map_err(|e| format!("Sin conexión a SteamGridDB: {e}"))?;
+        .map_err(|e| format!("{}: {e}", if en { "No connection to SteamGridDB" } else { "Sin conexión a SteamGridDB" }))?;
     match resp.status().as_u16() {
-        200..=299 => Ok("Key válida: conexión con SteamGridDB OK.".into()),
-        401 | 403 => Err("SteamGridDB rechazó la key. Revisala en tu perfil.".into()),
-        code => Err(format!("Respuesta inesperada de SteamGridDB (HTTP {code}).")),
+        200..=299 => Ok(if en {
+            "Valid key: connection to SteamGridDB OK."
+        } else {
+            "Key válida: conexión con SteamGridDB OK."
+        }.into()),
+        401 | 403 => Err(if en {
+            "SteamGridDB rejected the key. Check it in your profile."
+        } else {
+            "SteamGridDB rechazó la key. Revisala en tu perfil."
+        }.into()),
+        code => Err(if en {
+            format!("Unexpected response from SteamGridDB (HTTP {code}).")
+        } else {
+            format!("Respuesta inesperada de SteamGridDB (HTTP {code}).")
+        }),
     }
 }
 
@@ -648,6 +666,28 @@ const HIDDEN_UI_NAMES: [&str; 4] = [
     "Conteo de juegos",
 ];
 
+/// Idiomas soportados por la UI (submenú "Idioma" de la bandeja).
+const LANGS: [&str; 2] = ["es", "en"];
+
+/// Nombres de tamaño en inglés (índice = SIZE_NAMES / SIZES). Solo display:
+/// la config persiste el índice, no el nombre.
+const SIZE_NAMES_EN: [&str; 5] = ["Mini", "Small", "Medium", "Large", "Huge"];
+
+/// Nombres de acento en inglés (índice = ACCENT_NAMES). Solo display: el
+/// nombre canónico persistido (config/evento) sigue siendo el español.
+const ACCENT_NAMES_EN: [&str; 10] = [
+    "Violet", "Red", "Green", "Blue", "White",
+    "Gray", "Orange", "Yellow", "Cyan", "Pink",
+];
+
+/// Nombres de elementos ocultables en inglés (índice = HIDDEN_UI_NAMES).
+const HIDDEN_UI_NAMES_EN: [&str; 4] = [
+    "Window drag icon",
+    "Filter",
+    "Bottom buttons",
+    "Game count",
+];
+
 /// Posición custom de la portada en el overlay Detalles (paneo por arrastre):
 /// clave del juego → offset NORMALIZADO (0..1) de la ventana visible dentro del
 /// overflow total. Normalizada (no en px) para que siga teniendo sentido si el
@@ -710,6 +750,10 @@ struct GadgetConfig {
     /// deserializan a vec vacío; load_config lo normaliza.
     #[serde(default)]
     hidden_ui: Vec<bool>,
+    /// Idioma de la UI ("es" | "en"). Configs viejas sin el campo
+    /// deserializan a "" y load_config lo sanitiza al default (español).
+    #[serde(default)]
+    lang: String,
 }
 
 impl Default for GadgetConfig {
@@ -729,6 +773,7 @@ impl Default for GadgetConfig {
             manual_games: vec![],
             cover_pans: HashMap::new(),
             hidden_ui: vec![false; HIDDEN_UI_NAMES.len()],
+            lang: LANGS[0].to_string(),
         }
     }
 }
@@ -772,6 +817,10 @@ fn load_config(app: &tauri::AppHandle) -> GadgetConfig {
     // Configs viejas (sin el campo) traen hidden_ui vacío; normaliza a
     // exactamente 4 entradas (resize también trunca si sobraran).
     cfg.hidden_ui.resize(HIDDEN_UI_NAMES.len(), false);
+    // Configs viejas (sin el campo) deserializan lang como "" → default.
+    if !LANGS.contains(&cfg.lang.as_str()) {
+        cfg.lang = LANGS[0].to_string();
+    }
     cfg
 }
 
@@ -1107,12 +1156,23 @@ async fn resolve_covers(
     out
 }
 
-/// Referencias a los ítems chequeables para actualizar sus checkmarks.
+/// Referencias a los ítems de la bandeja para actualizar checkmarks y
+/// re-etiquetar el menú en vivo al cambiar el idioma.
 struct MenuState {
     opacity: Vec<CheckMenuItem<Wry>>,
     size: Vec<CheckMenuItem<Wry>>,
     accent: Vec<CheckMenuItem<Wry>>,
     hidden_ui: Vec<CheckMenuItem<Wry>>,
+    // Submenús (para relabel): Opacidad / Tamaño / Color / Ocultar UI / Idioma.
+    op_submenu: Submenu<Wry>,
+    size_submenu: Submenu<Wry>,
+    accent_submenu: Submenu<Wry>,
+    hidden_submenu: Submenu<Wry>,
+    lang_submenu: Submenu<Wry>,
+    // Items de idioma ("Español" / "English", cada uno en su propio idioma).
+    lang_items: Vec<CheckMenuItem<Wry>>,
+    sgdb: MenuItem<Wry>,
+    quit: MenuItem<Wry>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1167,6 +1227,53 @@ fn apply_hide_ui(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
     // Payload: [índice, oculto].
     let _ = app.emit("cardynox:set-ui-hidden", (idx, now_hidden));
     let _ = state.hidden_ui[idx].set_checked(now_hidden);
+}
+
+/// Aplica el cambio de idioma desde la bandeja (submenú Idioma): persiste,
+/// re-etiqueta el menú de la bandeja en su lugar y emite el evento para que
+/// el frontend (gadget + ventana SGDB) traduzca estático y dinámico.
+fn apply_lang(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
+    let code = LANGS[idx].to_string();
+    let mut cfg = load_config(app);
+    cfg.lang = code.clone();
+    save_config(app, &cfg);
+    relabel_menu(state, &code);
+    // Payload: el código ("es" | "en").
+    let _ = app.emit("cardynox:set-lang", code);
+    for (i, item) in state.lang_items.iter().enumerate() {
+        let _ = item.set_checked(i == idx);
+    }
+}
+
+/// Re-etiqueta toda la bandeja a `lang` ("es" | "en"): nombres de submenús,
+/// items de tamaño/color/ocultar-UI (las claves canónicas no cambian — solo el
+/// display se traduce) y los items de primer nivel. Los items de idioma,
+/// en cambio, siempre se muestran en su propio idioma (UX estándar).
+fn relabel_menu(state: &MenuState, lang: &str) {
+    let en = lang == "en";
+    state.op_submenu.set_text(if en { "Opacity" } else { "Opacidad" }).ok();
+    state.size_submenu.set_text(if en { "Size" } else { "Tamaño" }).ok();
+    state.accent_submenu.set_text("Color").ok();
+    state.hidden_submenu.set_text(if en { "Hide UI" } else { "Ocultar UI" }).ok();
+    state.lang_submenu.set_text(if en { "Language" } else { "Idioma" }).ok();
+    for (i, item) in state.size.iter().enumerate() {
+        let label = if en { SIZE_NAMES_EN[i] } else { SIZE_NAMES[i] };
+        item.set_text(label).ok();
+    }
+    for (i, item) in state.accent.iter().enumerate() {
+        let label = if en { ACCENT_NAMES_EN[i] } else { ACCENT_NAMES[i] };
+        item.set_text(label).ok();
+    }
+    for (i, item) in state.hidden_ui.iter().enumerate() {
+        let label = if en { HIDDEN_UI_NAMES_EN[i] } else { HIDDEN_UI_NAMES[i] };
+        item.set_text(label).ok();
+    }
+    // Cada idioma se muestra siempre en su propio idioma.
+    for (i, item) in state.lang_items.iter().enumerate() {
+        item.set_text(if i == 0 { "Español" } else { "English" }).ok();
+    }
+    state.sgdb.set_text(if en { "Enable SGDB" } else { "Activar SGDB" }).ok();
+    state.quit.set_text(if en { "Quit" } else { "Cerrar" }).ok();
 }
 
 /// Redimensiona la ventana y la recentra en su monitor (fallback: solo
@@ -1262,7 +1369,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             .collect::<Vec<_>>(),
     )?;
 
-    let acc_submenu = Submenu::with_items(
+    let accent_submenu = Submenu::with_items(
         app,
         "Color",
         true,
@@ -1272,11 +1379,31 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             .collect::<Vec<_>>(),
     )?;
 
-    let hidd_submenu = Submenu::with_items(
+    let hidden_submenu = Submenu::with_items(
         app,
         "Ocultar UI",
         true,
         &hidden_items
+            .iter()
+            .map(|i| i as &dyn IsMenuItem<Wry>)
+            .collect::<Vec<_>>(),
+    )?;
+
+    // Submenú Idioma: Español / English (cada item en su propio idioma).
+    let lang_items: Vec<CheckMenuItem<Wry>> = (0..LANGS.len())
+        .map(|i| {
+            let label = if i == 0 { "Español" } else { "English" };
+            CheckMenuItemBuilder::with_id(format!("lang-{i}"), label)
+                .checked(cfg.lang == LANGS[i])
+                .build(app)
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+
+    let lang_submenu = Submenu::with_items(
+        app,
+        if cfg.lang == "en" { "Language" } else { "Idioma" },
+        true,
+        &lang_items
             .iter()
             .map(|i| i as &dyn IsMenuItem<Wry>)
             .collect::<Vec<_>>(),
@@ -1296,20 +1423,36 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         &[
             &op_submenu as &dyn IsMenuItem<Wry>,
             &size_submenu as &dyn IsMenuItem<Wry>,
-            &acc_submenu as &dyn IsMenuItem<Wry>,
-            &hidd_submenu as &dyn IsMenuItem<Wry>,
+            &accent_submenu as &dyn IsMenuItem<Wry>,
+            &hidden_submenu as &dyn IsMenuItem<Wry>,
+            &lang_submenu as &dyn IsMenuItem<Wry>,
             &sgdb_item as &dyn IsMenuItem<Wry>,
             &quit as &dyn IsMenuItem<Wry>,
         ],
     )?;
 
-    // Estado compartido: el handler lo usa para actualizar los checkmarks.
+    // Estado compartido: el handler lo usa para los checkmarks y el
+    // relabeling en vivo al cambiar de idioma.
     app.manage(MenuState {
         opacity: opacity_items,
         size: size_items,
         accent: accent_items,
         hidden_ui: hidden_items,
+        op_submenu,
+        size_submenu,
+        accent_submenu,
+        hidden_submenu,
+        lang_submenu,
+        lang_items,
+        sgdb: sgdb_item,
+        quit,
     });
+
+    // Si el idioma persistido es inglés, la bandeja arranca re-etiquetada.
+    // (El frontend lo recibe vía get_gadget_config → cfg.lang.)
+    if cfg.lang == "en" {
+        relabel_menu(&app.state::<MenuState>(), "en");
+    }
 
     TrayIconBuilder::new()
         .tooltip("Cardynox Launcher")
@@ -1348,6 +1491,13 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     if let Ok(idx) = id[5..].parse::<usize>() {
                         if idx < HIDDEN_UI_NAMES.len() {
                             apply_hide_ui(app, &state, idx);
+                        }
+                    }
+                }
+                id if id.starts_with("lang-") => {
+                    if let Ok(idx) = id[5..].parse::<usize>() {
+                        if idx < LANGS.len() {
+                            apply_lang(app, &state, idx);
                         }
                     }
                 }

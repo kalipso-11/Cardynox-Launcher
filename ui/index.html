@@ -15,14 +15,14 @@
 
     <!-- Fila superior: handle de arrastre (manija) + buscador -->
     <div class="top-row">
-      <div id="drag-handle" data-tauri-drag-region title="Arrastrar la ventana">
+      <div id="drag-handle" data-tauri-drag-region data-i18n-title="dragTitle">
         <span class="grip"></span>
       </div>
-      <button id="btn-filter" type="button" title="Ordenar y filtrar por plataforma" aria-label="Ordenar y filtrar juegos">
+      <button id="btn-filter" type="button" data-i18n-title="filterTitle" data-i18n-aria="filterAria">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
       </button>
       <div class="search-wrap">
-        <input id="search" type="search" placeholder="Buscar juegos…" autocomplete="off" spellcheck="false" />
+        <input id="search" type="search" data-i18n-ph="searchPh" autocomplete="off" spellcheck="false" />
         <span class="search-icon" aria-hidden="true">⌕</span>
       </div>
     </div>
@@ -32,44 +32,44 @@
          y dejan al nombre en el medio entre portadas y botones). -->
     <div class="stage-spacer"></div>
 
-    <main id="stage" aria-label="Carrusel de juegos" data-tauri-drag-region>
+    <main id="stage" data-i18n-aria="carouselAria" data-tauri-drag-region>
       <!-- Las tarjetas se generan desde app.js -->
     </main>
 
     <div class="name-band"><h2 id="active-name"></h2></div>
 
     <nav class="actions">
-      <button id="btn-details"><span class="ic">ⓘ</span><span>Detalles</span></button>
-      <button id="btn-play"><span class="ic">▶</span><span>Jugar</span></button>
-      <button id="btn-add" title="Agregar un juego manualmente"><span class="ic">＋</span><span>Agregar</span></button>
+      <button id="btn-details"><span class="ic">ⓘ</span><span data-i18n="btnDetails">Detalles</span></button>
+      <button id="btn-play"><span class="ic">▶</span><span data-i18n="btnPlay">Jugar</span></button>
+      <button id="btn-add" data-i18n-title="addTitle"><span class="ic">＋</span><span data-i18n="btnAdd">Agregar</span></button>
     </nav>
 
-    <footer id="status">Cargando…</footer>
+    <footer id="status" data-i18n="loading">Cargando…</footer>
 
     <!-- Overlay de detalles: cubre todo el área del gadget -->
     <!-- Panel de orden/filtro por plataforma (dropdown desde #btn-filter). -->
     <div id="filter-panel" hidden>
       <div class="fp-section">
-        <div class="fp-label">Ordenar</div>
-        <label class="fp-radio"><input type="radio" name="sortmode" value="name" /><span>Alfabético</span></label>
-        <label class="fp-radio"><input type="radio" name="sortmode" value="platform" checked /><span>Por plataforma</span></label>
+        <div class="fp-label" data-i18n="fpSort">Ordenar</div>
+        <label class="fp-radio"><input type="radio" name="sortmode" value="name" /><span data-i18n="fpAlpha">Alfabético</span></label>
+        <label class="fp-radio"><input type="radio" name="sortmode" value="platform" checked /><span data-i18n="fpPlatform">Por plataforma</span></label>
       </div>
       <div class="fp-section">
-        <div class="fp-label">Plataformas</div>
+        <div class="fp-label" data-i18n="fpPlatforms">Plataformas</div>
         <div id="fp-platforms"></div>
       </div>
     </div>
 
     <div id="details-overlay" hidden>
-      <button id="btn-close-details" title="Cerrar (Esc)" aria-label="Cerrar detalles">×</button>
+      <button id="btn-close-details" data-i18n-title="closeDetailsTitle" data-i18n-aria="closeDetailsAria">×</button>
       <div class="dt-layout">
         <aside class="dt-art">
-          <img id="dt-art-img" src="" alt="Portada" draggable="false" />
+          <img id="dt-art-img" src="" data-i18n-alt="coverAlt" draggable="false" />
           <div id="dt-art-fallback"><span id="dt-art-initials">?</span></div>
           <!-- Acciones de portada: sobre la imagen, al pie. -->
           <div class="dt-art-actions">
-            <button id="dt-change-cover" title="Elegir imagen o GIF local">🖼 Cambiar portada</button>
-            <button id="dt-reset-cover" hidden>Quitar personalizada</button>
+            <button id="dt-change-cover" data-i18n-title="changeCoverTitle" data-i18n="btnChangeCover">🖼 Cambiar portada</button>
+            <button id="dt-reset-cover" hidden data-i18n="btnRemoveCustomCover">Quitar personalizada</button>
           </div>
           <input type="file" id="dt-cover-file" accept="image/png,image/jpeg,image/gif,image/webp,.gif" hidden />
         </aside>
@@ -77,61 +77,61 @@
           <h3 id="dt-title">—</h3>
 
           <div class="dt-field" id="dt-source-field">
-            <label>Origen</label>
+            <label data-i18n="lblSource">Origen</label>
             <span id="dt-source" class="dt-value">—</span>
           </div>
 
           <div class="dt-field">
-            <label>Nombre visible</label>
+            <label data-i18n="lblVisibleName">Nombre visible</label>
             <div class="dt-input-row">
               <input type="text" id="dt-name" spellcheck="false" />
-              <button id="dt-rename-btn" title="Guardar nombre">✓</button>
+              <button id="dt-rename-btn" data-i18n-title="saveNameTitle">✓</button>
             </div>
           </div>
 
           <!-- Caja unificada: ruta completa del juego (con .exe) + botones. -->
           <div class="dt-field" id="dt-path-field">
-            <label>Ruta de instalación</label>
+            <label data-i18n="lblInstallPath">Ruta de instalación</label>
             <code id="dt-path" class="dt-path">—</code>
             <div class="dt-path-actions">
-              <button id="dt-open-folder" disabled>📂 Abrir carpeta</button>
-              <button id="dt-change-path" hidden>✎ Cambiar ruta de juego</button>
+              <button id="dt-open-folder" disabled data-i18n="btnOpenFolder">📂 Abrir carpeta</button>
+              <button id="dt-change-path" hidden data-i18n="btnChangeGamePath">✎ Cambiar ruta de juego</button>
             </div>
           </div>
 
           <!-- Argumentos de lanzamiento: solo juegos "Otros". -->
           <div class="dt-field" id="dt-args-field" hidden>
-            <label for="dt-args">Argumentos de lanzamiento</label>
+            <label for="dt-args" data-i18n="lblLaunchArgs">Argumentos de lanzamiento</label>
             <div class="dt-input-row">
               <input type="text" id="dt-args" placeholder="-windowed -res 1920x1080" autocomplete="off" spellcheck="false" />
-              <button id="dt-args-save" title="Guardar argumentos">✓</button>
+              <button id="dt-args-save" data-i18n-title="saveArgsTitle">✓</button>
             </div>
-            <p class="dt-hint">Se pasan al .exe al ejecutarlo.</p>
+            <p class="dt-hint" data-i18n="argsHint">Se pasan al .exe al ejecutarlo.</p>
           </div>
 
           <div class="dt-field" id="dt-size-field" hidden>
-            <label>Tamaño en disco</label>
+            <label data-i18n="lblDiskSize">Tamaño en disco</label>
             <span id="dt-size" class="dt-value">—</span>
           </div>
 
           <div class="dt-steam" id="dt-steam-section" hidden>
-            <h4>Datos de Steam</h4>
+            <h4 data-i18n="steamDataH">Datos de Steam</h4>
             <ul>
-              <li id="dt-row-ach" hidden>🏆 Logros: <strong id="dt-ach">—</strong></li>
-              <li id="dt-row-time" hidden>⏱ Tiempo: <strong id="dt-time">—</strong></li>
-              <li id="dt-row-last" hidden>🕐 Última sesión: <strong id="dt-last">—</strong></li>
+              <li id="dt-row-ach" hidden><span data-i18n="lblAchievements">🏆 Logros:</span> <strong id="dt-ach">—</strong></li>
+              <li id="dt-row-time" hidden><span data-i18n="lblTime">⏱ Tiempo:</span> <strong id="dt-time">—</strong></li>
+              <li id="dt-row-last" hidden><span data-i18n="lblLastPlayed">🕐 Última sesión:</span> <strong id="dt-last">—</strong></li>
             </ul>
           </div>
 
-          <p id="dt-no-data" class="dt-muted" hidden>Sin datos locales disponibles.</p>
+          <p id="dt-no-data" class="dt-muted" hidden data-i18n="noLocalData">Sin datos locales disponibles.</p>
 
           <!-- Quitar del launcher (con confirmación inline). -->
           <div id="dt-remove-area">
-            <button id="dt-remove-game" class="dt-danger-btn" title="Sacar este juego del launcher (no lo desinstala)">Quitar del launcher</button>
+            <button id="dt-remove-game" class="dt-danger-btn" data-i18n-title="removeTitle" data-i18n="btnRemoveFromLauncher">Quitar del launcher</button>
             <div id="dt-remove-confirm" hidden>
               <span id="dt-remove-confirm-text"></span>
-              <button id="dt-remove-yes" class="dt-danger-btn">Sí, quitar</button>
-              <button id="dt-remove-no" class="dt-muted-btn">Cancelar</button>
+              <button id="dt-remove-yes" class="dt-danger-btn" data-i18n="confirmYes">Sí, quitar</button>
+              <button id="dt-remove-no" class="dt-muted-btn" data-i18n="cancelBtn">Cancelar</button>
             </div>
           </div>
         </section>
@@ -141,41 +141,41 @@
     <!-- Overlay para AGREGAR un juego (mismo estilo glass que Detalles, pero vacío
          y para cargar: portada, .exe y nombre visible). -->
     <div id="add-overlay" hidden>
-      <button id="btn-close-add" title="Cerrar (Esc)" aria-label="Cerrar">×</button>
+      <button id="btn-close-add" data-i18n-title="closeDetailsTitle" data-i18n-aria="closeAddAria">×</button>
       <div class="dt-layout">
         <aside class="dt-art">
-          <img id="add-art-img" src="" alt="Portada" draggable="false" />
+          <img id="add-art-img" src="" data-i18n-alt="coverAlt" draggable="false" />
           <div id="add-art-fallback"><span id="add-art-initials">＋</span></div>
           <!-- Acciones de portada: sobre la imagen, al pie. -->
           <div class="dt-art-actions">
-            <button id="add-change-cover">🖼 Elegir portada</button>
-            <button id="add-reset-cover" hidden>Quitar portada</button>
+            <button id="add-change-cover" data-i18n="btnPickCover">🖼 Elegir portada</button>
+            <button id="add-reset-cover" hidden data-i18n="btnRemoveCover">Quitar portada</button>
           </div>
           <input type="file" id="add-cover-file" accept="image/png,image/jpeg,image/gif,image/webp,.gif" hidden />
         </aside>
         <section class="dt-info">
-          <h3>Agregar juego</h3>
+          <h3 data-i18n="addGameH">Agregar juego</h3>
 
           <div class="dt-field">
-            <label for="add-name">Nombre visible</label>
+            <label for="add-name" data-i18n="lblVisibleName">Nombre visible</label>
             <div class="dt-input-row">
-              <input type="text" id="add-name" placeholder="Nombre del juego" autocomplete="off" spellcheck="false" />
+              <input type="text" id="add-name" data-i18n-ph="addNamePh" autocomplete="off" spellcheck="false" />
             </div>
           </div>
 
           <div class="dt-field">
-            <label>Ejecutable (.exe)</label>
-            <code id="add-path" class="dt-path">No seleccionado</code>
+            <label data-i18n="lblExe">Ejecutable (.exe)</label>
+            <code id="add-path" class="dt-path" data-i18n="notSelected">No seleccionado</code>
             <div class="dt-path-actions">
-              <button id="add-pick-exe">📂 Elegir ejecutable del juego</button>
+              <button id="add-pick-exe" data-i18n="btnPickExe">📂 Elegir ejecutable del juego</button>
             </div>
           </div>
 
-          <p class="dt-hint">El nombre visible se completa con el nombre del ejecutable, pero podés cambiarlo.</p>
+          <p class="dt-hint" data-i18n="addHint">El nombre visible se completa con el nombre del ejecutable, pero podés cambiarlo.</p>
 
           <div id="add-footer">
-            <button id="add-cancel" class="dt-cancel-btn">Cancelar</button>
-            <button id="add-confirm" class="dt-add-btn" disabled>Agregar</button>
+            <button id="add-cancel" class="dt-cancel-btn" data-i18n="cancelBtn">Cancelar</button>
+            <button id="add-confirm" class="dt-add-btn" disabled data-i18n="btnAddConfirm">Agregar</button>
           </div>
         </section>
       </div>
