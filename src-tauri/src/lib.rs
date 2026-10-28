@@ -965,11 +965,12 @@ const ACCENT_NAMES: [&str; 10] = [
 
 /// Elementos de UI ocultables desde la bandeja (submenú "Ocultar UI").
 /// El índice coincide con HIDEABLE en ui/app.js (mismo orden). Checked = oculto.
-const HIDDEN_UI_NAMES: [&str; 4] = [
+const HIDDEN_UI_NAMES: [&str; 5] = [
     "Icono de arrastrar ventana",
     "Filtro",
     "Botones inferiores",
     "Conteo de juegos",
+    "Botones de navegación",
 ];
 
 /// Idiomas soportados por la UI (submenú "Idioma" de la bandeja).
@@ -985,11 +986,12 @@ const ACCENT_NAMES_EN: [&str; 10] = [
 ];
 
 /// Nombres de elementos ocultables en inglés (índice = HIDDEN_UI_NAMES).
-const HIDDEN_UI_NAMES_EN: [&str; 4] = [
+const HIDDEN_UI_NAMES_EN: [&str; 5] = [
     "Window drag icon",
     "Filter",
     "Bottom buttons",
     "Game count",
+    "Navigation buttons",
 ];
 
 /// Posición custom de la portada en el overlay Detalles (paneo por arrastre):
@@ -1077,7 +1079,8 @@ impl Default for GadgetConfig {
     fn default() -> Self {
         Self {
             opacity: 100,
-            size_pct: 0.5,
+            // Por defecto (primera instalación): 75% de tamaño, centrado en pantalla.
+            size_pct: 0.75,
             pos_x: None,
             pos_y: None,
             accent: ACCENT_NAMES[0].to_string(),

@@ -38,6 +38,16 @@
 
     <main id="stage" data-i18n-aria="carouselAria" data-tauri-drag-region>
       <!-- Las tarjetas se generan desde app.js -->
+      <!-- Flechas prev/next: ancladas al centro, al lado de la última portada
+           visible. Navegan 1 tarjeta (wrap) reutilizando step(). -->
+      <button id="nav-prev" class="stage-nav prev" type="button"
+              data-i18n-title="navPrevTitle" data-i18n-aria="navPrevAria">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <button id="nav-next" class="stage-nav next" type="button"
+              data-i18n-title="navNextTitle" data-i18n-aria="navNextAria">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </button>
     </main>
 
     <div class="name-band"><h2 id="active-name"></h2></div>

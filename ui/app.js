@@ -47,6 +47,8 @@ const searchWrap = document.querySelector(".search-wrap");
 const searchClear = document.getElementById("search-clear");
 const activeName = document.getElementById("active-name");
 const statusEl = document.getElementById("status");
+const navPrev = document.getElementById("nav-prev");
+const navNext = document.getElementById("nav-next");
 
 // ---------------------------------------------------------------------------
 // i18n — español / inglés (submenú "Idioma" de la bandeja; persiste en
@@ -64,6 +66,10 @@ const I18N = {
     clearSearchTitle: "Borrar búsqueda",
     clearSearchAria: "Borrar el texto del buscador",
     carouselAria: "Carrusel de juegos",
+    navPrevTitle: "Juego anterior",
+    navPrevAria: "Ir al juego anterior",
+    navNextTitle: "Juego siguiente",
+    navNextAria: "Ir al juego siguiente",
     btnDetails: "Detalles",
     btnPlay: "Jugar",
     btnAdd: "Agregar",
@@ -143,6 +149,10 @@ const I18N = {
     clearSearchTitle: "Clear search",
     clearSearchAria: "Clear the search text",
     carouselAria: "Games carousel",
+    navPrevTitle: "Previous game",
+    navPrevAria: "Go to previous game",
+    navNextTitle: "Next game",
+    navNextAria: "Go to next game",
     btnDetails: "Details",
     btnPlay: "Play",
     btnAdd: "Add",
@@ -393,14 +403,15 @@ function applyAccent(name) {
 /** Elementos de UI ocultables desde la bandeja (submenú "Ocultar UI").
     MISMO ORDEN que HIDDEN_UI_NAMES en lib.rs. display:none se restaura con "".
     [0] manija de arrastre, [1] botón filtro, [2] botones inferiores,
-    [3] conteo de juegos (footer). */
-const HIDEABLE = ["#drag-handle", "#btn-filter", ".actions", "#status"];
+    [3] conteo de juegos (footer), [4] flechas de navegación prev/next. */
+const HIDEABLE = ["#drag-handle", "#btn-filter", ".actions", "#status", ".stage-nav"];
 
-/** Muestra u oculta un elemento del gadget. idx fuera de rango → no-op. */
+/** Muestra u oculta un elemento del gadget (puede ser más de uno, p. ej.
+    .stage-nav afecta a ambas flechas). idx fuera de rango → no-op. */
 function applyUiHidden(idx, hidden) {
-  const el = document.querySelector(HIDEABLE[idx]);
-  if (!el) return;
-  el.style.display = hidden ? "none" : "";
+  const sel = HIDEABLE[idx];
+  if (!sel) return;
+  document.querySelectorAll(sel).forEach((el) => { el.style.display = hidden ? "none" : ""; });
 }
 
 /** Aplica el estado persistido de todos los elementos (arranque). */
@@ -639,6 +650,10 @@ function layout() {
   const current = filtered[active];
   activeName.textContent = current ? current.name : "Sin resultados";
   document.getElementById("btn-play").disabled = !current;
+  // Flechas prev/next: solo navegan si hay 2+ juegos (con 0/1 no tiene sentido).
+  const navDisabled = filtered.length < 2;
+  if (navPrev) navPrev.disabled = navDisabled;
+  if (navNext) navNext.disabled = navDisabled;
 }
 
 function setActive(idx) {
@@ -846,6 +861,11 @@ function bindEvents() {
     autoAnimatePause();  // limpiar también cuenta como interacción de búsqueda
     searchInput.focus(); // deja el foco listo para escribir otra vez
   });
+
+  // Flechas prev/next del carrusel: navegan 1 tarjeta. Reutilizan step(), que
+  // aplica el mismo throttle (260 ms) que la rueda → no hay saltos en cadena.
+  navPrev.addEventListener("click", () => step(-1));
+  navNext.addEventListener("click", () => step(1));
 
   // Icono de filtro: abre/cierra el panel de orden + plataformas.
   const btnFilter = document.getElementById("btn-filter");

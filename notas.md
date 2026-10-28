@@ -994,3 +994,12 @@
 - **Build:** release incremental ~15 s, 0 warnings. App corriendo PID 33744 (~37 KB). NSIS reconstruido.
 - **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/app.js` (+ pendientes ya verificados: `ui/blocked.css`, `ui/index.html`, `ui/styles.css`).
 - **Pendiente / decisión abierta con el usuario:** ¿velocidad OK (1 paso cada 3 s)? ¿reanudo automático a los 6 s está bien o prefieres que quede detenido hasta desactivarlo? Se puede cambiar a un drift continuo (rAF fraccional) en vez de pasos discretos si se prefiere ese feel.
+
+## 2026-10-28 — Flechas de navegación prev/next + ítem "Botones de navegación" en Ocultar UI
+- **Flechas (feature previa de esta sesión, aún sin commit):** botones `#nav-prev` / `#nav-next` (`class="stage-nav prev|next"`) dentro de `#stage`, al lado de la última portada visible de cada lado. Icono chevron, fondo transparente, sin borde, icono oscuro (`#1c1e29`, hover `#0b0c12`), glow blanco ligero (2 `drop-shadow`) para leerse sobre fondos oscuros. Reutilizan `step(±1)` (mismo throttle 260 ms) y se deshabilitan cuando `filtered.length < 2`. NO pausan el auto-animator (igual que la rueda). Ancladas al centro con `calc(50% ± 300px)` → siguen pegadas a la portada exterior en cualquier tamaño. i18n: `navPrevTitle/navPrevAria/navNextTitle/navNextAria` (es+en).
+- **Ocultar UI → "Botones de navegación" (esta tarea):** el submenú ya escala solo con el tamaño del array.
+  - **Rust (`lib.rs`):** `HIDDEN_UI_NAMES: [&str;4]→[&str;5]` agrega `"Botones de navegación"`; `HIDDEN_UI_NAMES_EN: [&str;4]→[&str;5]` agrega `"Navigation buttons"`. Todo lo demás (resize de configs viejas 4→5, CheckMenuItem auto por iteración `hidd-{i}`, dispatch guard, relabel) adapta solo. Configs viejas arrancan con el ítem nuevo visible (false).
+  - **Frontend (`app.js`):** `HIDEABLE` agrega `".stage-nav"` (índice 4, mismo orden que Rust). `applyUiHidden` pasó de `querySelector`→`querySelectorAll` + loop + guard `if(!sel) return;` para ocultar **ambas** flechas a la vez (los otros 4 selectores siguen matcheando uno solo → compatible).
+- **Build:** release ~15 s, 0 warnings. App corriendo PID 28740 (~37 KB). Se eliminó artifact basura `src-tauri/nul`.
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/app.js`. Pendientes sin commit desde la feature de flechas: `ui/index.html`, `ui/styles.css`, `ui/app.js`.
+- **Pendiente:** confirmar con usuario el ítem nuevo en "Ocultar UI" y el look de las flechas → entonces commitear todo (flechas + este cambio) y reconstruir NSIS (NSIS actual NO incluye aún las flechas).

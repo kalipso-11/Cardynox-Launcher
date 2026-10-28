@@ -251,6 +251,42 @@ body.browser-preview {
   perspective: 900px;
 }
 
+/* ---------- Flechas de navegación del carrusel (prev/next) ----------
+   Ancladas al CENTRO con calc(50% ± 300px): quedan justo al lado de la última
+   portada visible (la a=2, centrada en x=±240 y escalada 0.66 → su borde
+   exterior ≈ ±281). Al medirse desde el centro, siguen pegadas a ella en
+   cualquier tamaño del gadget. z-index 40: por encima de las tarjetas (máx 30). */
+.stage-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  width: 26px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1c1e29; /* ícono oscuro, plano (sin fondo ni borde) */
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, transform 0.12s;
+}
+.stage-nav.prev { left: calc(50% - 300px); }
+.stage-nav.next { right: calc(50% - 300px); }
+.stage-nav:hover { color: #0b0c12; } /* apenas más oscuro al pasar el mouse */
+.stage-nav:active { transform: translateY(-50%) scale(0.92); }
+/* Iluminación ligera clara (glow difuso): hace legible el ícono oscuro
+   sobre fondos oscuros sin cambiar su color. */
+.stage-nav svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  filter: drop-shadow(0 0 2.5px rgba(255, 255, 255, 0.55))
+          drop-shadow(0 0 6px rgba(255, 255, 255, 0.3));
+}
+.stage-nav[disabled] { opacity: 0.3; cursor: default; pointer-events: none; }
+
 .card {
   position: absolute;
   left: 50%;
