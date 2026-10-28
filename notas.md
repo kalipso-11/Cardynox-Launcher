@@ -1047,3 +1047,7 @@
 - **Archivos tocados:** `README.md` (nuevo), `notas.md`.
 - **Pendiente:** commit README (+ notas).
 - **Edit (mismo día):** el usuario pidió sacar toda referencia a Rainmeter del README → se editaron 4 lugares (intro EN, título de sección EN, intro ES, título de sección ES); ahora dice "transparent, frameless widget" / "widget transparente y sin bordes".
+
+## 2026-10-28 — LICENSE (no comercial)
+- **Nuevo archivo `LICENSE`** en la raíz: licencia no comercial, Copyright (c) 2026 Kalipso-11. Uso personal/no comercial permitido; prohibido uso/venta/redistribución comercial sin permiso escrito; modificaciones permitidas para uso personal con retención de licencia y copyright.
+- **Archivos tocados:** `LICENSE` (nuevo), `notas.md`. Commit pendiente.
