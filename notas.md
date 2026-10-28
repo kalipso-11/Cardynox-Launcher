@@ -1003,3 +1003,33 @@
 - **Build:** release ~15 s, 0 warnings. App corriendo PID 28740 (~37 KB). Se eliminó artifact basura `src-tauri/nul`.
 - **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/app.js`. Pendientes sin commit desde la feature de flechas: `ui/index.html`, `ui/styles.css`, `ui/app.js`.
 - **Pendiente:** confirmar con usuario el ítem nuevo en "Ocultar UI" y el look de las flechas → entonces commitear todo (flechas + este cambio) y reconstruir NSIS (NSIS actual NO incluye aún las flechas).
+
+## 2026-10-28 — Commit final + instalador NSIS + default primer arranque (75%, centrado, todo visible)
+- **Default de configuración (`lib.rs` → `impl Default for GadgetConfig`):** `size_pct: 0.5 → 0.75`. Resto ya estaba bien por defecto: `hidden_ui = vec![false; 5]` (todo visible), `opacity: 100`, `pos_x/pos_y: None` → `restore_position()` centra en el monitor primario tras `apply_intended_size()`. Es decir, **primera instalación = todo visible, 75% de tamaño, centrado en pantalla**.
+- **Nota:** este default solo aplica a usuarios SIN `cardynox.json` (primera instalación). El usuario ya tiene config propia; para probarlo debe borrar `C:\Users\Usario11\AppData\Roaming\com.cardynox.launcher\cardynox.json`.
+- **Git:** commit `1ecf516` agrupa flechas prev/next + ítem "Botones de navegación" en Ocultar UI + default 75%. Árbol limpio. Se eliminó el artifact basura `src-tauri/nul` (redirect `2>nul` mal dirigido en Windows creó un archivo llamado `nul`; evito ese pattern — usar `2>/dev/null`).
+- **Build:** release + NSIS OK (primero falló por proceso vivo bloqueando el exe → taskkill y reintento). `cardynox-launcher.exe` ≈ 11.56 MiB; instalador `bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` ≈ 2.49 MiB (15:58).
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `notas.md` (el resto del bundle ya estaba commitado en esta sesión).
+
+## 2026-10-28 — Nuevo ícono: "Emblema C Neón Futurista" (rombos azules/violetas + C) como ícono de app, instalador y bandeja
+- **Origen:** imagen del usuario `Emblema C Neón Futurista.png` (1254×1254 RGBA, fondo transparente). El usuario pidió dejar de generar el ícono a mano y usar esta.
+- **Generación (Python/Pillow):** PNGs `32x32.png` (1,8 KB), `128x128.png` (14 KB), `icon.png` (745 KB) + `icon.ico` multiresolución [16,24,32,48,64,128,256] (70 KB). Sin cambios en `tauri.conf.json` ni `lib.rs`: la bandeja usa `app.default_window_icon()` (primer ícono de `bundle.icon` → `icons/32x32.png`) y el instalador usa `installerIcon: icons/icon.ico`.
+- **Observación:** en 16 px (bandeja a escala 100%) el diseño queda algo pixelado por ser muy detallado; a 48 px+ se ve bien. Si no convence en bandeja → opción de armar una versión simplificada solo para tamaños chicos.
+- **Build:** release ~17 s, 0 warnings. App corriendo PID 6588. **Sin commit todavía** (pendiente confirmación visual del usuario); NSIS pendiente por armar con el ícono nuevo (setup + escritorio + menú inicio).
+
+## 2026-10-28 — FIX definitivo: "el ícono sigue siendo el viejo" → caché de recursos de tauri-build
+- **Síntoma:** tras generar los íconos nuevos y recompilar, la bandeja seguía mostrando el ícono anterior. Se limpió la caché de iconos de Windows (no era el problema).
+- **Diagnóstico (fuentes de verdad):** parseo PE a mano (pure Python/struct: DOS→COFF→OptionalHeader→DataDirectory[2]→.rsrc→IMAGE_RESOURCE_DIRECTORY) + scan global de firmas PNG en el binario. El exe de 16:23 traía 7 PNGs embebidos (805…20198 B) con MD5 **distintos** a los del `icon.ico` nuevo en disco (731…44128 B) → la build anterior **no re-empaquetó los recursos**: `tauri-build` reutilizó el `.res` compilado viejo desde `OUT_DIR` porque solo cambian archivos de `src-tauri/icons/` y eso no dispara el rerun del build script. Se extrajo el 256×256 embebido y se vio: era el ícono viejo (C blanca sobre azul).
+- **Fix:** `touch` (LastWriteTime) de `tauri.conf.json` + `src/lib.rs` → fuerza re-ejecución del build script. `taskkill //F //IM cardynox-launcher.exe` (el exe vivo bloqueaba el reemplazo, error "Acceso denegado"), luego `cargo build --release` (0.94 s). Exe nuevo 16:34 (11,592,192 B).
+- **Verificación:** re-scan del exe → los 7 PNGs embebidos coinciden MD5 a MD5 con las 7 entradas del `icon.ico` en disco (16→256 px). VEREDICTO: TODOS LOS ICONOS NUEVOS EMBEBIDOS = True.
+- **App:** corriendo PID 28152 desde `target/release`. Único proceso (verificado); sin entrada en Run keys; sin copia en Program Files (desinstalado).
+- **Archivos tocados:** solo recompile el exe (los íconos en disco ya eran correctos). `notas.md`.
+- **Lección para builds futuros:** si cambian SOLO `src-tauri/icons/*`, tocar antes `tauri.conf.json` (o `cargo clean -p cardynox-launcher` a fondo) y SIEMPRE verificar el ícono embebido con el scan de PNGs antes de lanzar.
+- **Pendiente:** usuario confirma visualmente bandeja/taskbar. Si OK → `git add src-tauri/icons/* notas.md` + commit, y `cargo tauri build` para NSIS nuevo (el instalador actual de 15:58 trae el ícono viejo).
+
+## 2026-10-28 — Ícono v2: imagen corregida del usuario (993×993) + rebuild verificado
+- **Origen:** el usuario reenvió `Emblema C Neón Futurista.png` (versión corregida, 993×993 RGBA, 776 KB) y pidió repetir todo con esta. Mismo diseño de rombos azul/violeta + C neón.
+- **Flujo (ya consolidado tras el fix de la caché):** (1) Python/Pillow generó `32x32.png` (2,3 KB), `128x128.png` (19,9 KB), `icon.png` (683 KB) e `icon.ico` multires [16…256] (99,5 KB) → copiados a `src-tauri/icons/`. (2) **Touch de `tauri.conf.json` + `src/lib.rs`** (obligatorio: sin esto tauri-build reutiliza el `.res` viejo). (3) taskkill + `cargo build --release` (15,7 s, 0 warnings; exe 16:37, 11.621.888 B). (4) **Verificación PE**: scan de PNGs embebidos → los 7 MD5 coinciden 1 a 1 con las 7 entradas del `icon.ico` en disco. VEREDICTO: TODOS OK.
+- **App:** corriendo PID 34532 desde `target/release`. Ícono 256 extraído y mostrado al usuario para confirmación visual.
+- **Archivos tocados:** `src-tauri/icons/{32x32.png,128x128.png,icon.png,icon.ico}`, exe recompilado, `notas.md`.
+- **Pendiente:** confirmación visual del usuario → commit de íconos + NSIS nuevo (`cargo tauri build`; el instalador 15:58 sigue con ícono viejo).
