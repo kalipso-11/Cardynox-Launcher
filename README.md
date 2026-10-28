@@ -50,7 +50,7 @@
 - All data is local: `%APPDATA%\com.cardynox.launcher` (`cardynox.json` config + `covers/`)
 
 ### Install (Windows 10/11, x64)
-Run `Cardynox Launcher_0.1.0_x64-setup.exe`. It installs to *Program Files* and creates desktop and Start-menu shortcuts with the app icon. Requires WebView2 (the installer handles it).
+Download the latest version from [Releases](https://github.com/kalipso-11/Cardynox-Launcher/releases). Run the `.exe` installer — it installs to *Program Files* and creates desktop and Start-menu shortcuts with the app icon. Requires WebView2 (the installer handles it).
 
 ### Build from source
 Prerequisites: stable Rust toolchain + [Tauri v2 prerequisites](https://tauri.app/start/prerequisites/).
@@ -113,7 +113,7 @@ cargo tauri build            # NSIS installer → target/release/bundle/nsis/
 - Todos los datos son locales: `%APPDATA%\com.cardynox.launcher` (config `cardynox.json` + carpeta `covers/`)
 
 ### Instalación (Windows 10/11, x64)
-Ejecutá `Cardynox Launcher_0.1.0_x64-setup.exe`. Instala en *Program Files* y crea accesos directos en el escritorio y en el menú Inicio con el ícono de la app. Requiere WebView2 (el instalador lo resuelve).
+Descargá la última versión desde [Releases](https://github.com/kalipso-11/Cardynox-Launcher/releases). Ejecutá el instalador `.exe` — instala en *Program Files* y crea accesos directos en el escritorio y en el menú Inicio con el ícono de la app. Requiere WebView2 (el instalador lo resuelve).
 
 ### Compilar desde fuente
 Requisitos: toolchain Rust estable + [prerequisitos de Tauri v2](https://tauri.app/start/prerequisites/).
