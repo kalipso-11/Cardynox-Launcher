@@ -4,11 +4,11 @@
 
 ## English
 
-**Cardynox Launcher** is an ultra-lightweight desktop game launcher that lives on your screen like a Rainmeter skin: a transparent, frameless widget that stays in the background of your desktop and keeps all your games — Steam, Epic, or anywhere else — one click away. Built with **Rust + Tauri**, it idles at ~10 MB of RAM, launches instantly, and never gets in the way until you need it.
+**Cardynox Launcher** is an ultra-lightweight desktop game launcher: a transparent, frameless widget that lives on your desktop, stays in the background of your screen and keeps all your games — Steam, Epic, or anywhere else — one click away. Built with **Rust + Tauri**, it idles at ~10 MB of RAM, launches instantly, and never gets in the way until you need it.
 
 ### Features
 
-**Rainmeter-style desktop widget**
+**Desktop widget**
 - Transparent, borderless window rendered *behind* every other app — like part of your wallpaper
 - Draggable by its handle; position and size are remembered across reboots, monitor swaps and resolution changes (scale-aware)
 - Size slider in the tray: from "mini" up to 50% of the screen
@@ -67,11 +67,11 @@ cargo tauri build            # NSIS installer → target/release/bundle/nsis/
 
 ## Español
 
-**Cardynox Launcher** es un launcher de juegos ultraligero que vive en tu escritorio como una piel de Rainmeter: un widget transparente y sin bordes que permanece al fondo de la pantalla y mantiene todos tus juegos — Steam, Epic o donde los tengas — a un clic de distancia. Hecho con **Rust + Tauri**, ocupa ~10 MB de RAM en reposo, arranca al instante y no se mete en el medio hasta que lo necesitás.
+**Cardynox Launcher** es un launcher de juegos ultraligero: un widget transparente y sin bordes que vive en tu escritorio, permanece al fondo de la pantalla y mantiene todos tus juegos — Steam, Epic o donde los tengas — a un clic de distancia. Hecho con **Rust + Tauri**, ocupa ~10 MB de RAM en reposo, arranca al instante y no se mete en el medio hasta que lo necesitás.
 
 ### Funcionalidades
 
-**Widget de escritorio estilo Rainmeter**
+**Widget de escritorio**
 - Ventana transparente y sin bordes renderizada *detrás* de todas las aplicaciones — como parte del wallpaper
 - Arrastrable por su manija; la posición y el tamaño se recuerdan entre reinicios, cambios de monitor y resolución (consciente de la escala)
 - Control de **tamaño** en la bandeja: desde "mini" hasta el 50% de la pantalla
