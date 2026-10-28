@@ -946,3 +946,42 @@
 - **Verificación:** build limpia (0 warnings), release + NSIS 2.50 MiB; app lanzada OK (PID 30572) y single-instance intacto (2ª copia cede). Verificación visual de la ventana/cartel pendiente del usuario (sin acceso a pantalla).
 - **Archivos tocados:** `src-tauri/src/lib.rs`, `src-tauri/capabilities/default.json`, `ui/blocked.html`, `ui/blocked.css`, `ui/blocked.js`, `ui/app.js`, `notas.md`.
 - **Pendiente:** verificación visual del usuario (abrir la ventana, re-habilitar un juego instalado y uno no instalado) y commit git de esta feature.
+
+## 2026-10-28 — Bug: cartel “ya no está instalado” visible al abrir la ventana bloqueados
+- **Reporte del usuario:** al abrir “Juegos bloqueados” aparecía de una el cartel “El juego ya no está instalado” y no se podía cerrar; solo debía salir al darle Habilitar a un juego no instalado.
+- **Causa raíz (CSS):** `ui/blocked.html` pone `<div id="confirm" class="overlay" hidden>`, pero `ui/blocked.css` define `.overlay { display: flex }`. El atributo `hidden` solo se oculta vía el estilo de la hoja de usuario (`[hidden] { display: none }`) y **cualquier `display` de autor lo anula** → el overlay quedaba siempre visible; al forzar `hidden=true` en JS tampoco cambiaba nada visual (por eso “no se puede cerrar”). El gadget principal (`ui/styles.css`) ya tenía el fix global `[hidden] { display: none !important }`; la ventana bloqueados, nueva, se quedó sin él.
+- **Fix:** regla `.overlay[hidden] { display: none !important; }` en `ui/blocked.css` (mismo patrón que `#details-overlay[hidden]`/`#add-overlay[hidden]` en styles.css). El cartel ahora solo se muestra cuando `enableGame()` recibe `reenabled=false`.
+- **Build:** release 0 warnings + NSIS regenerado 2.49 MiB; app relanzada OK (PID 33396).
+- **Archivos tocados:** `ui/blocked.css`, `notas.md`.
+- **Pendiente:** usuario verifica: abrir la ventana → sin cartel; Habilitar juego no instalado → aparece el cartel y se puede cerrar con Cancelar/Esc/fuera.
+
+## 2026-10-28 — Ventana bloqueados: anclada ARRIBA del gadget, transparente y sin taparlo
+- **Reporte del usuario:** la ventana se abría en el centro ENCIMA del gadget, lo tapaba y era totalmente opaca. Pedido: misma posición que el detalle (anclada al gadget), que no cubra el gadget (arriba) y que sea transparente.
+- **Posicionamiento (`lib.rs`):** nueva fn `blocked_window_geom(app)` → (posición, tamaño). Mismo ANCHO y borde izquierdo que el gadget (outer); se abre DIRECTAMENTE ARRIBA: borde inferior de la ventana = top del gadget − 10px. Si no hay ≥140px libres arriba (gadget pegado al borde superior del monitor) → pasa a ABAJO del gadget. Altura clamp-eada al espacio disponible (max 540, min 140) y x clamp-eada dentro del monitor (usa `current_monitor()` del main: origen/tamaño/escala; en Windows devuelven valor directo). Si el gadget se mueve con la ventana ya abierta, el path de re-abierto RE-ancla (set_size + set_position antes del show).
+- **Transparente como el gadget:** builder pasa a `.decorations(false) + .transparent(true) + .shadow(false) + .skip_taskbar(true)` (mismo trio que la skin en tauri.conf.json; sin shadow no hay rectángulo negro alrededor). `.visible(false)` antes del show → se posiciona y recién ahí aparece (sin flash en el centro).
+- **Frontend:** `blocked.css` — html/body transparentes; `#blocked` = panel glass con el estilo EXACTO de `#details-overlay` (margen 8px ≈ su inset:8px, radio 14px, `rgba(10,13,28,.92)`, borde `rgba(255,255,255,.16)`, sombra inset + glow de acento; agregada var `--accent-rgb`). `blocked.html` — header con `data-tauri-drag-region="deep"` (todo el header arrastra; el BUTTON queda excluido por drag.js) + botón ✕ nuevo (`.blk-close`, hover rojo). `blocked.js` — clic en ✕ → `tauri.window.getCurrentWindow().close()` (destruye; la próxima apertura desde bandeja re-crea y re-ancla).
+- **Capabilities:** agregado `core:window:allow-close` (el close no viene en core:default, igual que destroy).
+- **Build:** release 0 warnings + NSIS 2.49 MiB; app relanzada OK (PID 27756).
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/blocked.html`, `ui/blocked.css`, `ui/blocked.js`, `src-tauri/capabilities/default.json`, `notas.md`.
+- **Pendiente:** usuario verificó y NO le convenció la variante transparente (ver entrada siguiente).
+
+## 2026-10-28 — REVERT: ventana bloqueados vuelve a normal centrada (se conserva fix del cartel)
+- **Decisión del usuario:** probó la variante frameless/transparente anclada arriba y la revirtió — pidió: "que este centrado y que no sea transparente, el de antes estaba bien". Lo único que debía mantenerse era que el cartel "no instalado" no aparezca al abrir.
+- **Revert completo:**
+  - `lib.rs`: eliminada `blocked_window_geom()` (dead code) y `show_blocked_window` vuelve a `.center()` + marco nativo + 620×540 (versión original). Doc comment aclara por qué se eligió el look opaco.
+  - `ui/blocked.css`: vuelve el fondo opaco `linear-gradient(158deg, #0a0f1f, #171236)`, `#blocked` a altura completa sin panel glass; borrados estilos `.blk-close`. **SE CONSERVA** `.overlay[hidden] { display: none !important; }` (el bug real reportado).
+  - `ui/blocked.html`: header sin `data-tauri-drag-region`, sin botón ✕ (cierra por la X nativa del marco).
+  - `ui/blocked.js`: retirado el handler de cierre.
+  - `capabilities/default.json`: fuera `core:window:allow-close` (ya no se usa).
+- **Build:** release 0 warnings + NSIS 2.49 MiB; app relanzada OK (PID 24680).
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `ui/blocked.html`, `ui/blocked.css`, `ui/blocked.js`, `src-tauri/capabilities/default.json`, `notas.md`.
+- **El user la volvió a probar y seguía tapando el gadget (ver entrada siguiente: se cambió SOLO la posición).**
+
+## 2026-10-28 — Ventana bloqueados: look normal pero ARRIBA del gadget (no centrada)
+- **Reporte del usuario:** "se me abre encima del gadget y lo tapa, que este arriba del de detalles". El look opaco con marco se mantiene (ya estaba aprobado); solo cambia la POSICIÓN.
+- **Cambio (`lib.rs`, solo Rust — frontend intacto):** re-agregada `blocked_window_geom(app)` (misma lógica de la variante transparente revirtida, pero sin tocar el look): mismo ancho y borde izquierdo que el gadget; se abre ARRIBA (borde inferior de la ventana = top del gadget − 10px), en la misma zona relativa del panel de detalles. Sin ≥140px arriba → pasa a abajo del gadget. Altura clamp (max 540 / min 140) y x clamp dentro del monitor (`current_monitor()` del main). Fallback sin main → centro del monitor primario (`app.primary_monitor()`, antes era (0,0)).
+- **`show_blocked_window`:** sale `.center()`; entra `visible(false)` → `set_size` + `set_position` → `show()` (sin parpadeo en posición incorrecta). Path de re-abierto: si el gadget se movió con la ventana abierta, RE-ancla (mismo cálculo).
+- **Sin cambios en:** `ui/blocked.*` (sigue opaca, sin drag, cierre por X nativa), capabilities (sin allow-close), fix `.overlay[hidden]` intacto.
+- **Build:** release 0 warnings + NSIS 2.49 MiB (08:58); app corriendo PID 22880.
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `notas.md`.
+- **Pendiente:** usuario verifica: abre arriba del gadget sin taparlo; si el gadget está pegado al borde superior, debe salir abajo.

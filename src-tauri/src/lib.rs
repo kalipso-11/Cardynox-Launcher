@@ -629,25 +629,108 @@ fn show_sgdb_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Abre (o enfoca, si ya está abierta) la ventana de juegos bloqueados.
-/// Lista los juegos sacados del launcher y permite re-habilitarlos.
+/// Geometría (posición + tamaño) de la ventana "Juegos bloqueados": mismo
+/// ancho y borde izquierdo que el gadget, abierta DIRECTAMENTE ARRIBA de él —
+/// en la misma zona relativa donde aparece el panel de detalles— sin taparlo:
+/// el borde inferior de la ventana queda 10px por arriba del borde superior
+/// del gadget. Si no hay espacio suficiente arriba (gadget pegado al borde
+/// superior del monitor) pasa a la parte de abajo. La altura queda
+/// clamp-eada para que siempre quepa en el monitor.
+fn blocked_window_geom(app: &tauri::AppHandle) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    const GAP: f64 = 10.0; // entre el gadget y la ventana (px lógicos)
+    const MARGIN: f64 = 8.0; // distancia mínima al borde del monitor
+    const FALLBACK: (f64, f64) = (620.0, 540.0);
+    const MIN_H: f64 = 140.0;
+
+    let Some(main) = app.get_webview_window("main") else {
+        // Sin main (debería no pasar): al centro del monitor primario.
+        if let Ok(Some(m)) = app.primary_monitor() {
+            let s = m.scale_factor();
+            let p = m.position();
+            let sz = m.size();
+            let cx = (p.x as f64 / s) + ((sz.width as f64 / s) - FALLBACK.0) / 2.0;
+            let cy = (p.y as f64 / s) + ((sz.height as f64 / s) - FALLBACK.1) / 2.0;
+            return (
+                LogicalPosition::new(cx.max(MARGIN), cy.max(MARGIN)),
+                LogicalSize::new(FALLBACK.0, FALLBACK.1),
+            );
+        }
+        return (LogicalPosition::new(0.0, 0.0), LogicalSize::new(FALLBACK.0, FALLBACK.1));
+    };
+
+    // Escala + origen/tamaño del monitor donde está el gadget (en Windows
+    // devuelven valor directo, no Result — ver notas de restore_position).
+    let (scale, mon_x, mon_y, mon_w, mon_h) = match main.current_monitor() {
+        Ok(Some(m)) => {
+            let p = m.position();
+            let s = m.size();
+            (
+                m.scale_factor(),
+                p.x as f64 / m.scale_factor(),
+                p.y as f64 / m.scale_factor(),
+                s.width as f64 / m.scale_factor(),
+                s.height as f64 / m.scale_factor(),
+            )
+        }
+        _ => (1.0, 0.0, 0.0, 1920.0, 1080.0),
+    };
+
+    let (Ok(mpos), Ok(msize)) = (main.outer_position(), main.outer_size()) else {
+        return (LogicalPosition::new(0.0, 0.0), LogicalSize::new(FALLBACK.0, FALLBACK.1));
+    };
+
+    // Gadget en px lógicos (outer: la ventana principal es frameless, así que
+    // outer == área visible).
+    let mx = mpos.x as f64 / scale;
+    let my = mpos.y as f64 / scale;
+    let mw = msize.width as f64 / scale;
+    let mh = msize.height as f64 / scale;
+
+    // Mismo ancho y borde izquierdo que el gadget.
+    let w = if mw >= 320.0 { mw } else { FALLBACK.0 };
+    let x = mx.clamp(mon_x + MARGIN, (mon_x + mon_w - MARGIN).max(mon_x + MARGIN));
+
+    // Preferido: ARRIBA del gadget, sin taparlo.
+    let space_above = my - (mon_y + MARGIN) - GAP;
+    if space_above >= MIN_H {
+        let h = FALLBACK.1.min(space_above);
+        (LogicalPosition::new(x, my - GAP - h), LogicalSize::new(w, h))
+    } else {
+        // No cupo arriba → abajo del gadget, también dentro del monitor.
+        let top = my + mh + GAP;
+        let h = FALLBACK.1.min((mon_y + mon_h - MARGIN) - top).max(MIN_H);
+        (LogicalPosition::new(x, top), LogicalSize::new(w, h))
+    }
+}
+
+/// Abre (o re-ancla si ya está abierta) la ventana de juegos bloqueados.
+/// Look NORMAL (con marco y opaca — el usuario lo prefirió sobre la variante
+/// transparente), pero posicionada ARRIBA del gadget sin taparlo. Si el
+/// gadget se mueve con la ventana ya abierta, se re-ancla en esa misma zona.
 fn show_blocked_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window("blocked") {
+        // Si se movió el gadget con la ventana ya abierta, re-ancla.
+        let (pos, size) = blocked_window_geom(app);
+        let _ = w.set_size(size);
+        let _ = w.set_position(pos);
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
         return Ok(());
     }
+    let (pos, size) = blocked_window_geom(app);
     let window = WebviewWindowBuilder::new(
         app,
         "blocked",
         WebviewUrl::App("blocked.html".into()),
     )
     .title(if load_config(app).lang == "en" { "Blocked games · Cardynox" } else { "Juegos bloqueados · Cardynox" })
-    .center()
     .resizable(true)
+    .visible(false) // se posiciona antes del show para no parpadear en otro lugar
     .build()?;
-    let _ = window.set_size(LogicalSize::new(620.0, 540.0));
+    let _ = window.set_size(size);
+    let _ = window.set_position(pos);
+    let _ = window.show();
     let _ = window.set_focus();
     Ok(())
 }
