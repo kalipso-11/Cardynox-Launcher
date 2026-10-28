@@ -193,7 +193,9 @@ body.browser-preview {
 
 #search:focus {
   border-color: rgba(var(--accent-rgb), calc(0.85 * var(--fade)));
-  background: rgba(var(--accent-rgb), calc(0.22 * var(--fade)));
+  /* Interior oscuro y casi opaco: el acento queda solo en borde/glow, así el
+     texto blanco mantiene buen contraste (antes era un tinte claro que lavaba el campo). */
+  background: rgba(9, 11, 26, calc(0.9 * var(--fade)));
   box-shadow:
     0 0 0 1px rgba(var(--accent-rgb), calc(0.55 * var(--fade))),
     0 0 18px 2px rgba(var(--accent-rgb), calc(0.45 * var(--fade)));
@@ -201,6 +203,30 @@ body.browser-preview {
 }
 
 #search::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* Botón para limpiar la búsqueda: solo visible cuando hay texto (.has-text). */
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.1);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.search-clear:hover { color: var(--text); background: rgba(255, 255, 255, 0.2); }
+.search-clear[hidden] { display: none !important; } /* hidden debe vencer al display:flex de autor */
+/* Con texto, el input cede espacio a la derecha para no solapar con la cruz. */
+.search-wrap.has-text #search { padding-right: 30px; }
 
 /* ---------- Escenario / carrusel ---------- */
 
@@ -365,9 +391,9 @@ body.browser-preview {
 
 .actions button .ic { font-size: 9px; color: var(--accent); transform: translateY(-1px); }
 
-/* Sube la etiqueta de texto (Detalles / Jugar / Agregar) 2px hacia arriba,
+/* Sube la etiqueta de texto (Detalles / Jugar / Agregar) 1px hacia arriba,
    sin mover el icono ni el propio boton (evita pisar :active{transform}). */
-.actions button > span:not(.ic) { transform: translateY(-2px); }
+.actions button > span:not(.ic) { transform: translateY(-1px); }
 
 /* Jugar: vive en la fila inferior (.actions), en posicion central entre
    Detalles y Agregar. Hereda el estilo .actions button (como los demas);
@@ -384,9 +410,11 @@ body.browser-preview {
   height: 13px;
   text-align: center;
   font-size: 9.5px;
-  color: var(--muted);
+  color: var(--text); /* más brillante que --muted: se lee sobre fondos claros */
   letter-spacing: 0.3px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  /* Halo oscuro fuerte (mismo criterio que #active-name): contraste garantizado
+     sobre cualquier wallpaper, también los claros. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
 }
 
 #status.flash { color: var(--text); transition: none; }

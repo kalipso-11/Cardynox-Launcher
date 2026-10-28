@@ -1067,6 +1067,10 @@ struct GadgetConfig {
     /// deserializan a "" y load_config lo sanitiza al default (español).
     #[serde(default)]
     lang: String,
+    /// Animación automática de portadas (toggle "Animar Portadas" en bandeja):
+    /// las tarjetas avanzan solas de derecha a izquierda. Default: off.
+    #[serde(default)]
+    auto_animate: bool,
 }
 
 impl Default for GadgetConfig {
@@ -1089,6 +1093,7 @@ impl Default for GadgetConfig {
             cover_pans: HashMap::new(),
             hidden_ui: vec![false; HIDDEN_UI_NAMES.len()],
             lang: LANGS[0].to_string(),
+            auto_animate: false,
         }
     }
 }
@@ -1490,6 +1495,7 @@ struct MenuState {
     lang_items: Vec<CheckMenuItem<Wry>>,
     sgdb: MenuItem<Wry>,
     blocked: MenuItem<Wry>,
+    animate: CheckMenuItem<Wry>,
     quit: MenuItem<Wry>,
 }
 
@@ -1628,6 +1634,16 @@ fn apply_lang(app: &tauri::AppHandle, state: &MenuState, idx: usize) {
     }
 }
 
+/// Toggle "Animar Portadas" (bandeja): persiste el estado y lo emite al frontend.
+/// Checked = animación activa. El movimiento en sí lo ejecuta el carrusel JS.
+fn apply_animate(app: &tauri::AppHandle, state: &MenuState, on: bool) {
+    let mut cfg = load_config(app);
+    cfg.auto_animate = on;
+    save_config(app, &cfg);
+    let _ = app.emit("cardynox:set-auto-animate", on);
+    let _ = state.animate.set_checked(on);
+}
+
 /// Re-etiqueta toda la bandeja a `lang` ("es" | "en"): nombres de submenús,
 /// items de tamaño/color/ocultar-UI (las claves canónicas no cambian — solo el
 /// display se traduce) y los items de primer nivel. Los items de idioma,
@@ -1663,6 +1679,7 @@ fn relabel_menu(state: &MenuState, lang: &str) {
     }
     state.sgdb.set_text(if en { "Enable SGDB" } else { "Activar SGDB" }).ok();
     state.blocked.set_text(if en { "Blocked games" } else { "Juegos bloqueados" }).ok();
+    state.animate.set_text(if en { "Animate covers" } else { "Animar Portadas" }).ok();
     state.quit.set_text(if en { "Quit" } else { "Cerrar" }).ok();
 }
 
@@ -1870,6 +1887,14 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
+    // Toggle "Animar Portadas": las portadas avanzan solas de derecha a izq.
+    let animate_item = CheckMenuItemBuilder::with_id(
+        "animate",
+        if cfg.lang == "en" { "Animate covers" } else { "Animar Portadas" },
+    )
+    .checked(cfg.auto_animate)
+    .build(app)?;
+
     // Item Ocultar/Mostrar (primer item del menú; el texto se actualiza dinámicamente).
     let initial_vis_label = toggle_vis_label(&cfg.lang, true); // al arrancar siempre visible
     let toggle_vis_item = MenuItem::with_id(app, "toggle-vis", initial_vis_label, true, None::<&str>)?;
@@ -1895,6 +1920,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             &lang_submenu as &dyn IsMenuItem<Wry>,
             &sgdb_item as &dyn IsMenuItem<Wry>,
             &blocked_item as &dyn IsMenuItem<Wry>,
+            &animate_item as &dyn IsMenuItem<Wry>,
             &quit as &dyn IsMenuItem<Wry>,
         ],
     )?;
@@ -1915,6 +1941,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         lang_items,
         sgdb: sgdb_item,
         blocked: blocked_item,
+        animate: animate_item,
         quit,
     });
 
@@ -1982,6 +2009,11 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     if let Err(e) = show_blocked_window(app) {
                         eprintln!("[cardynox] No se pudo abrir la ventana de juegos bloqueados: {e}");
                     }
+                }
+                "animate" => {
+                    // Toggle desde el checkmark (source of truth = config).
+                    let now_on = !load_config(app).auto_animate;
+                    apply_animate(app, &state, now_on);
                 }
                 _ => {}
             }

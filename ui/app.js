@@ -43,6 +43,8 @@ let addCoverDataUrl = null; // data URL de la portada elegida (aún no guardada)
 
 const stage = document.getElementById("stage");
 const searchInput = document.getElementById("search");
+const searchWrap = document.querySelector(".search-wrap");
+const searchClear = document.getElementById("search-clear");
 const activeName = document.getElementById("active-name");
 const statusEl = document.getElementById("status");
 
@@ -59,6 +61,8 @@ const I18N = {
     filterTitle: "Ordenar y filtrar por plataforma",
     filterAria: "Ordenar y filtrar juegos",
     searchPh: "Buscar juegos…",
+    clearSearchTitle: "Borrar búsqueda",
+    clearSearchAria: "Borrar el texto del buscador",
     carouselAria: "Carrusel de juegos",
     btnDetails: "Detalles",
     btnPlay: "Jugar",
@@ -136,6 +140,8 @@ const I18N = {
     filterTitle: "Sort and filter by platform",
     filterAria: "Sort and filter games",
     searchPh: "Search games…",
+    clearSearchTitle: "Clear search",
+    clearSearchAria: "Clear the search text",
     carouselAria: "Games carousel",
     btnDetails: "Details",
     btnPlay: "Play",
@@ -413,6 +419,7 @@ function initGadgetConfig() {
       applyAccent(cfg.accent);
       applyAllUiHidden(cfg.hidden_ui);
       applyLang(cfg.lang || "es");
+      setAutoAnimate(cfg.auto_animate); // arranca la animación si estaba activa
     })
     .catch((err) => console.error("get_gadget_config falló:", err));
   tauri.event.listen("cardynox:set-opacity", (e) => applyOpacity(e.payload));
@@ -421,6 +428,8 @@ function initGadgetConfig() {
   tauri.event.listen("cardynox:set-ui-hidden", (e) => applyUiHidden(e.payload[0], e.payload[1]));
   // Cambio de idioma desde el submenú "Idioma" de la bandeja (payload: "es"|"en").
   tauri.event.listen("cardynox:set-lang", (e) => applyLang(e.payload));
+  // Toggle "Animar Portadas" desde la bandeja (payload: boolean).
+  tauri.event.listen("cardynox:set-auto-animate", (e) => setAutoAnimate(e.payload));
 }
 
 /** Resuelve portadas automáticas para juegos no-Steam que aún no la tienen.
@@ -525,6 +534,7 @@ function buildCards() {
     }
 
     card.addEventListener("click", () => {
+      autoAnimatePause(); // tocar una portada detiene la animación automática
       const idx = filtered.findIndex((g) => g.id === game.id);
       if (idx !== -1 && idx !== active) setActive(idx);
       else if (game.id === filtered[active]?.id) playActive();
@@ -646,6 +656,52 @@ function step(dir) {
 }
 
 // ---------------------------------------------------------------------------
+// Animación automática de portadas (toggle "Animar Portadas" en la bandeja).
+// Las tarjetas avanzan solas de derecha a izquierda reutilizando la transición
+// CSS de .card vía setActive(). Se PAUSA cuando el usuario interactúa (click en
+// una portada o búsqueda) y se REANUDA solo tras un rato sin tocar nada.
+// ---------------------------------------------------------------------------
+const AUTO_ANIMATE_STEP_MS = 3000; // un paso cada ~3 s ("muy despacio")
+const AUTO_ANIMATE_RESUME_MS = 6000; // reintenta tras 6 s sin interacción
+let autoAnimate = false; // estado desde la bandeja (persistido)
+let autoRafId = null; // rAF activo del auto-avance
+let autoLastStepAt = 0; // timestamp del último paso automático
+let autoResumeAt = 0; // hasta qué timestamp queda pausada
+
+function setAutoAnimate(on) {
+  autoAnimate = !!on;
+  if (autoAnimate) startAutoAnimate(); else stopAutoAnimate();
+}
+
+function startAutoAnimate() {
+  if (autoRafId != null) return;
+  autoLastStepAt = 0; // fuerza un paso inmediato al activar (feedback visual)
+  const loop = (ts) => {
+    if (
+      autoAnimate &&
+      filtered.length > 1 &&
+      ts >= autoResumeAt &&
+      ts - autoLastStepAt >= AUTO_ANIMATE_STEP_MS
+    ) {
+      autoLastStepAt = ts;
+      setActive(active + 1); // entra por la derecha, sale por la izquierda
+    }
+    autoRafId = requestAnimationFrame(loop);
+  };
+  autoRafId = requestAnimationFrame(loop);
+}
+
+function stopAutoAnimate() {
+  if (autoRafId != null) { cancelAnimationFrame(autoRafId); autoRafId = null; }
+}
+
+/** Pausa temporal: el usuario tocó algo (click en portada o búsqueda). */
+function autoAnimatePause() {
+  if (!autoAnimate) return;
+  autoResumeAt = performance.now() + AUTO_ANIMATE_RESUME_MS;
+}
+
+// ---------------------------------------------------------------------------
 // Buscador
 // ---------------------------------------------------------------------------
 
@@ -691,6 +747,14 @@ function applyFilter() {
   if (active < 0 || active >= filtered.length) active = Math.max(0, filtered.length - 1);
   layout();
   updateSearchStatus();
+  updateSearchClear(); // sync: la cruz aparece solo si hay texto en el buscador
+}
+
+/** Muestra/oculta la cruz del buscador según si hay texto escrito. */
+function updateSearchClear() {
+  const hasText = searchInput.value.trim().length > 0;
+  searchClear.hidden = !hasText;
+  searchWrap.classList.toggle("has-text", hasText);
 }
 
 // Genera los checkboxes de plataforma segun las presentes en `games` (+conteo).
@@ -770,8 +834,18 @@ function bindEvents() {
     if (dir !== 0) step(dir);
   }, { passive: false });
 
-  // Buscador en vivo.
-  searchInput.addEventListener("input", applyFilter);
+  // Buscador en vivo. Escribir pausa la animación automática (es una búsqueda).
+  searchInput.addEventListener("input", () => {
+    applyFilter();
+    autoAnimatePause();
+  });
+  // Cruz para limpiar la búsqueda: borra el texto y re-filtra (vuelve a mostrar todos).
+  searchClear.addEventListener("click", () => {
+    searchInput.value = "";
+    applyFilter();       // re-corta `filtered` → todos los juegos de nuevo
+    autoAnimatePause();  // limpiar también cuenta como interacción de búsqueda
+    searchInput.focus(); // deja el foco listo para escribir otra vez
+  });
 
   // Icono de filtro: abre/cierra el panel de orden + plataformas.
   const btnFilter = document.getElementById("btn-filter");

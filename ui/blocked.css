@@ -111,6 +111,9 @@ body {
   color: var(--muted);
   font-size: 13.5px;
 }
+/* El atributo hidden debe ganar al display:flex de autor (mismo fix que
+   .overlay[hidden]); sin esto el cartel "no hay juegos" queda visible junto a la lista. */
+.empty[hidden] { display: none !important; }
 .empty-ico {
   width: 42px;
   height: 42px;
@@ -138,6 +141,10 @@ body {
   justify-content: center;
   padding: 24px;
 }
+/* El atributo hidden debe ganar al display:flex de autor; sin esto el cartel
+   queda visible al abrir la ventana y no se puede cerrar (mismo fix que en
+   styles.css del gadget). */
+.overlay[hidden] { display: none !important; }
 .dialog {
   width: min(440px, 100%);
   background: rgba(18, 16, 38, 0.97);
