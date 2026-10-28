@@ -1033,3 +1033,10 @@
 - **App:** corriendo PID 34532 desde `target/release`. Ícono 256 extraído y mostrado al usuario para confirmación visual.
 - **Archivos tocados:** `src-tauri/icons/{32x32.png,128x128.png,icon.png,icon.ico}`, exe recompilado, `notas.md`.
 - **Pendiente:** confirmación visual del usuario → commit de íconos + NSIS nuevo (`cargo tauri build`; el instalador 15:58 sigue con ícono viejo).
+
+## 2026-10-28 — Commit ícono v2 + instalador NSIS con ícono nuevo
+- **Git:** commit `5ab9dee` (5 archivos: 4 íconos + notas.md). Se eliminó el artifact basura `src-tauri/nul` de vuelta.
+- **NSIS:** `cargo tauri build` (~21 s; release recompilado 15 s + makensis). Instalador: `src-tauri/target/release/bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` (2,730,549 B = 2.60 MiB, 16:39).
+- **Verificación del exe final:** los 7 PNGs embebidos (16→256) coinciden MD5 a MD5 con `icon.ico` de disco. **Nota:** mi primer check reportó "FALLO" por un bug propio del script (comparaba `'(16, 16)'` vs `'16x16'`); el re-scan detallado confirmó TODO OK. El instalador trae el ícono nuevo.
+- **App:** relanzada desde `target/release` tras el build.
+- **Pendiente:** usuario instala/prueba el NSIS (setup + acceso directo escritorio + menú inicio, todo con el ícono nuevo).
