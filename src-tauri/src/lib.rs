@@ -677,6 +677,43 @@ fn compute_size(pct: f64, screen_w: f64, screen_h: f64) -> (f64, f64) {
     (w, h)
 }
 
+/// Tamaño lógico intencionado del gadget según el monitor actual + `pct`, sin aplicarlo.
+/// None si no se pudo determinar el monitor o la escala es inválida.
+fn intended_logical_size(window: &WebviewWindow, pct: f64) -> Option<(f64, f64)> {
+    let (Ok(Some(monitor)), Ok(scale)) = (window.current_monitor(), window.scale_factor()) else {
+        return None;
+    };
+    if !(scale > 0.0) {
+        return None;
+    }
+    let sw = monitor.size().width as f64 / scale;
+    let sh = monitor.size().height as f64 / scale;
+    Some(compute_size(pct, sw, sh))
+}
+
+/// Aplica el tamaño lógico intencionado (monitor actual + `pct`) a la ventana.
+fn apply_intended_size(window: &WebviewWindow, pct: f64) {
+    if let Some((w, h)) = intended_logical_size(window, pct) {
+        let _ = window.set_size(LogicalSize::new(w, h));
+    }
+}
+
+/// Log mínimo de auto-corrección de tamaño. Solo se escribe cuando el gadget se
+/// corrige solo tras un cambio externo (cambio de Hz 60→120 que Windows trata como
+/// "otro monitor"). Archivo: size.log en app_config_dir. Nunca falla.
+fn log_size_correction(app: &tauri::AppHandle, now_ms: u64, cw: f64, ch: f64, w: f64, h: f64, scale: f64) {
+    let Ok(dir) = app.path().app_config_dir() else { return };
+    let line = format!(
+        "epoch_ms={} | auto-fix {:.0}x{:.0} -> {:.0}x{:.0} (scale {:.2})\n",
+        now_ms, cw, ch, w, h, scale
+    );
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("size.log"))
+        .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+}
+
 /// Colores de acento del gadget (índice 0 = violeta, el default). El frontend
 /// lleva la triple RGB de cada uno; Rust solo persiste el nombre.
 const ACCENT_NAMES: [&str; 10] = [
@@ -728,13 +765,10 @@ struct GadgetConfig {
     /// Opacidad total del gadget en porcentaje (uno de OPACITY_STEPS).
     opacity: u8,
     /// Porcentaje de tamaño (0.0..=1.0). 0 = Mini, 1.0 = mitad de pantalla.
-    /// Configs viejas con `size: u8` se migran en load_config.
+    /// Los configs viejos usaban un campo legacy `size: u8`; ya se descontinua
+    /// (serde lo ignora al cargar). Mantenerlo como migración rompía el 0%.
     #[serde(default)]
     size_pct: f64,
-    /// Campo legacy para deserialización de configs anteriores.
-    #[serde(default)]
-    #[allow(dead_code)]
-    size: u8,
     /// Posición guardada del gadget (píxeles lógicos). None = centrar al arrancar.
     #[serde(default)]
     pos_x: Option<f64>,
@@ -797,7 +831,6 @@ impl Default for GadgetConfig {
         Self {
             opacity: 100,
             size_pct: 0.5,
-            size: 0,
             pos_x: None,
             pos_y: None,
             accent: ACCENT_NAMES[0].to_string(),
@@ -846,11 +879,9 @@ fn load_config(app: &tauri::AppHandle) -> GadgetConfig {
     if !OPACITY_STEPS.contains(&cfg.opacity) {
         cfg.opacity = 100;
     }
-    // Migración: configs viejas con size>0 y size_pct=0 (missing) → mapear.
-    if cfg.size_pct == 0.0 && cfg.size > 0 {
-        cfg.size_pct = (cfg.size as f64) / 4.0;
-    }
-    // Clamp final.
+    // Clamp final. El 0% explícito del usuario se respeta: la migración legacy
+    // `size` (condición `size_pct == 0`) era ambigua y re-convertía el Mini a un
+    // tamaño grande, así que quedó descontinuada.
     cfg.size_pct = cfg.size_pct.clamp(0.0, 1.0);
     // Configs viejas (sin el campo) deserializan accent como "" → default.
     if !ACCENT_NAMES.contains(&cfg.accent.as_str()) {
@@ -1766,6 +1797,15 @@ pub fn run() {
             resolve_covers,
             set_size_pct
         ])
+        .plugin(tauri_plugin_single_instance::init(|app_handle, _args, _cwd| {
+            // Segunda instancia intentó arrancar: trae la ventana existente a
+            // primer plano (show + unminimize + focus) en vez de crear un gadget nuevo.
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .setup(|app| {
             setup_tray(app.handle())?;
             // Arranca con visible:false en la config y se muestra acá; el
@@ -1774,16 +1814,46 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let cfg = load_config(app.handle());
                 // Aplica tamaño según porcentaje + monitor actual.
-                if let (Ok(Some(monitor)), Ok(scale)) = (window.current_monitor(), window.scale_factor()) {
-                    if scale > 0.0 {
-                        let sw = monitor.size().width as f64 / scale;
-                        let sh = monitor.size().height as f64 / scale;
-                        let (w, h) = compute_size(cfg.size_pct, sw, sh);
-                        let _ = window.set_size(LogicalSize::new(w, h));
-                    }
-                }
+                apply_intended_size(&window, cfg.size_pct);
                 // Restaura posición guardada (o centra si no hay / off-screen).
                 restore_position(&window);
+
+                // FIX (bug: el gadget se achica al cambiar de Hz 60→120): Windows trata
+                // al 4K como "otro monitor" y redimensiona la ventana física. Sin esto,
+                // el frontend (applyUiScale) achica el contenido y se acumula en cada
+                // cambio. Re-aplicamos el tamaño intencionado ante cada resize de la
+                // ventana, con tolerancia de 4px lógicos (evita loop) y debounce 200ms.
+                let apph = app.handle();
+                let last_fix = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+                {
+                    let h2 = apph.clone();
+                    let lf = last_fix.clone();
+                    window.on_window_event(move |event| {
+                        let tauri::WindowEvent::Resized(phys) = event else { return };
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis() as u64)
+                            .unwrap_or(0);
+                        if now_ms.saturating_sub(lf.load(std::sync::atomic::Ordering::Relaxed)) < 200 {
+                            return;
+                        }
+                        let Some(win) = h2.get_webview_window("main") else { return };
+                        let pct = load_config(&h2).size_pct;
+                        let (Ok(scale), Some((w, h))) =
+                            (win.scale_factor(), intended_logical_size(&win, pct)) else { return };
+                        if !(scale > 0.0) {
+                            return;
+                        }
+                        let cw = phys.width as f64 / scale;
+                        let ch = phys.height as f64 / scale;
+                        if (cw - w).abs() > 4.0 || (ch - h).abs() > 4.0 {
+                            let _ = win.set_size(LogicalSize::new(w, h));
+                            lf.store(now_ms, std::sync::atomic::Ordering::Relaxed);
+                            log_size_correction(&h2, now_ms, cw, ch, w, h, scale);
+                        }
+                    });
+                }
+
                 let _ = window.show();
             }
             Ok(())

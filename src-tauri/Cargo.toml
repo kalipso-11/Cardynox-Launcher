@@ -22,3 +22,4 @@ winreg = "0.56"
 # Cliente HTTP asíncrono (tier storesearch de Steam + SGDB opcional).
 # default-tls → SChannel en Windows: sin OpenSSL ni compilador C extra.
 reqwest = { version = "0.12", default-features = false, features = ["json", "default-tls"] }
+tauri-plugin-single-instance = "2"

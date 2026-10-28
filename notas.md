@@ -890,3 +890,45 @@
   - Instalador: `src-tauri/target/release/bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` (~2.46 MiB).
   - Exe suelto: `src-tauri/target/release/cardynox-launcher.exe` (~10.9 MiB).
 - **Nota:** NSIS perMachine instala en `C:\Program Files\Cardynox Launcher\` + shortcut escritorio + menú Inicio (ícono C azul oscuro); WebView2 por downloadBootstrapper (requiere internet al instalar).
+
+## 2026-10-27 — FIX: el gadget se achicaba al cambiar de Hz (60↔120) en 4K
+- **Bug reportado:** en monitor 4K, cada cambio 60Hz→120Hz (Windows lo trata como "otro monitor") hacía que el gadget se achicara más y más, sin tocar el tamaño.
+- **Causa raíz:** no había ningún re-afirmado de tamaño en runtime. `set_size` sobre `"main"` solo corría (a) al arrancar y (b) desde el slider. Al cambiar de Hz Windows redimensiona la ventana física; el frontend `applyUiScale()` (`ui/app.js`) achica el contenido vía `zoom = innerWidth/BASE_W` para seguir el ancho real → queda "congelado" en el tamaño achicado y se acumula (nada lo corrige).
+- **No había log** de la instancia corriendo (solo `eprintln!` a stderr, no capturado a archivo). Se agregó un log mínimo dedicado.
+- **Fix (`src-tauri/src/lib.rs`):**
+  - Nuevos helpers: `intended_logical_size(window,pct) -> Option<(w,h)>` (tamaño lógico intencionado contra monitor actual + `size_pct`, sin aplicar), `apply_intended_size(window,pct)` (lo aplica) y `log_size_correction(...)` (1 línea a `size.log` en app_config_dir solo cuando hay auto-corrección; nunca falla).
+  - En `.setup()`: reemplacé el resize manual por `apply_intended_size(&window, cfg.size_pct)` y añadí `window.on_window_event(|e| … Resized(phys) …)` que **re-aplica el tamaño intencionado** ante cada resize: recomputa contra monitor actual + `size_pct`, compara con el tamaño real (lógico = físico/escala) y si la desviación > 4px lógicos hace `set_size`. Tolerancia de 4px evita loop; `AtomicU64` + debounce 200ms evita tormenta de set_size. Se captura el `AppHandle` (no clona WebviewWindow) y se re-obtiene `"main"` por evento.
+  - API verificada contra fuente local de Tauri **2.12.5** (`on_window_event(Fn(&WindowEvent))`, `WindowEvent::Resized(PhysicalSize<u32>)`, `inner_size()->PhysicalSize<u32>`, `Window: Clone`).
+- **Build:** `cargo build` (debug) limpio, 26s, 0 warnings. Instancia vieja (PID 13028) matada; nueva levantada → **PID 31116** desde `src-tauri/target/debug/cardynox-launcher.exe`.
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `notas.md`.
+- **Verificación pendiente (usuario):** cambiar 60→120Hz y confirmar que el gadget NO se achica (vuelve al tamaño del slider). Cada auto-corrección queda en `C:\Users\Usario11\AppData\Roaming\com.cardynox.launcher\size.log` (`epoch_ms=… | auto-fix WxH -> WxH (scale …)`).
+- **Nota:** el instalador de Program Files sigue con el código viejo (release previo del 2026-10-27) hasta recompilar el NSIS. Probar siempre desde `target/debug` por ahora.
+
+## 2026-10-27 — Release + instalador NSIS con la fix del achicamiento (Hz)
+- **Pedido:** "ok, funciona, volvé a hacer el instalador y decime dónde está".
+- **Build:** `cargo tauri build` (release optimizado, 22.4s, 0 warnings). Incluye la fix del bug de achicamiento por cambio de Hz + toda la funcionalidad previa.
+- **Artefactos (en target/, no versioneados):**
+  - Instalador: `src-tauri/target/release/bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` (~2.58 MiB).
+  - Exe suelto: `src-tauri/target/release/cardynox-launcher.exe` (~11.4 MiB).
+- **Nota:** se mató la instancia corriendo (debug PID 31116) antes de entregar, para que la instalación/actualización en Program Files no se bloquee con archivos abiertos. El instalador actualiza la instalación previa de `C:\Program Files\Cardynox Launcher\`.
+- **Pendiente:** usuario instala y verifica el fix desde la app de Program Files.
+
+## 2026-10-27 — FIX: slider de tamaño, el 0% saltaba al 100%
+- **Bug reportado:** en el selector de tamaño, dejarlo en 0% lo hacía volver a 100%.
+- **Causa raíz:** migración legacy en `load_config()`: `if size_pct == 0.0 && size > 0 { size_pct = size/4.0 }`. Como `size_pct` tiene `#[serde(default)]`=0.5, esa migración NUNCA se activaba para configs viejas (siempre deserializaban a 0.5), PERO el campo legacy `size` persistía en el JSON; al guardar `size_pct:0.0` (Mini explícito) y recargar, la condición disparaba → `size/4` (con size=4 → 1.0 = 100%).
+- **Fix (`src-tauri/src/lib.rs`):** descontinué la migración y el campo legacy `size: u8` (lo saqué del struct `GadgetConfig` y del `Default`). Serde ignora campos desconocidos, así que configs viejos siguen cargando igual. El 0% explícito ahora se respeta; solo queda el clamp 0..=1.
+- **Build:** `cargo tauri build` (release, 14.97s, 0 warnings). Instalador NSIS regenerado: `src-tauri/target/release/bundle/nsis/Cardynox Launcher_0.1.0_x64-setup.exe` (~2.58 MiB).
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `notas.md`.
+- **Pendiente:** usuario verifica slider en 0% (se queda en Mini) y, si quiere, instala el NSIS actualizado.
+
+## 2026-10-28 — Single-instance (sin copias duplicadas del gadget)
+- **Pedido del usuario:** que el programa no permita múltiples instancias abiertas.
+- **Implementación (`src-tauri`):**
+  - `Cargo.toml`: dep nueva `tauri-plugin-single-instance = "2"` (resuelve v2.5.5).
+  - `lib.rs` (~línea 1800, entre `.invoke_handler(…)` y `.setup(…)`): `.plugin(tauri_plugin_single_instance::init(|app_handle, _args, _cwd| { … }))`. Handler trae la ventana `main` a primer plano (`show` + `unminimize` + `set_focus`).
+  - Comportamiento: bajo el capo usa un **mutex con nombre de Windows**. Si una 2ª copia intenta arrancar, detecta que el mutex está tomado, **cede a la instancia ya viva** (enfoca su ventana) y el proceso nuevo termina solo. Sin duplicado ni proceso huérfano.
+- **Nota clave:** el mutex se keyea por el **app identifier** (`com.cardynox.launcher` en tauri.conf.json), NO por path. Dar doble clic al .exe de Program Files y al de target/release a la vez también respeta single-instance (el 2º cede al 1º). Al matar la app desde Task Manager el mutex se libera → sin lock atascado.
+- **Verificación (real):** release → PID 616; intenté una 2ª copia → listado final con UNA sola instancia (PID 616). Funciona.
+- **Build:** `cargo tauri build` (release, 0 warnings) + makensis. Instalador NSIS `Cardynox Launcher_0.1.0_x64-setup.exe` (~2.58 MiB); exe suelto ~11.4 MiB.
+- **Archivos tocados:** `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `notas.md`.
+- **Pendiente:** usuario instala el NSIS actualizado (el de Program Files aún trae la build previa SIN single-instance) y prueba: abrir 2ª copia → debe enfocarse la 1ª sin duplicar.
