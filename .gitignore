@@ -12,3 +12,6 @@ desktop.ini
 
 # Logs de build/ejecución
 *.log
+
+# Notas personales (no versionar)
+notas.md
