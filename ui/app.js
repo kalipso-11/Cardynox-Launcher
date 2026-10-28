@@ -1598,6 +1598,28 @@ function persistDetailsPan() {
 // Inicio
 // ---------------------------------------------------------------------------
 
+// Re-carga la lista de juegos + portadas y reconstruye el carrusel. Se usa cuando
+// un juego se re-habilita o purga desde la ventana "Juegos bloqueados".
+async function refreshGames() {
+  if (!invoke) return;
+  try {
+    games = await invoke("list_games");
+    const covers = await invoke("get_custom_covers");
+    customCovers.clear();
+    for (const [id, path] of Object.entries(covers)) {
+      customCovers.set(id, tauri.core.convertFileSrc(path));
+    }
+    requestAutoCovers();
+    applyFilter();
+    buildCards();
+    if (active >= filtered.length) active = Math.max(0, filtered.length - 1);
+    layout();
+    setStatus(baseStatus(), false);
+  } catch (err) {
+    console.error("refreshGames falló:", err);
+  }
+}
+
 async function init() {
   if (!invoke) document.body.classList.add("browser-preview"); // fondo solo en preview de browser
   try {
@@ -1641,6 +1663,9 @@ async function init() {
   requestAutoCovers();
   // Si se activa/cambia la key de SGDB desde la bandeja, reintenta lo pendiente.
   if (invoke) tauri.event.listen("cardynox:sgdb-changed", () => requestAutoCovers());
+  // Se re-habilitó/purgó un juego desde la ventana "Juegos bloqueados": integra el
+  // cambio en el carrusel (re-escaneo + reconstrucción).
+  if (invoke) tauri.event.listen("cardynox:games-changed", () => refreshGames());
 
   filtered = computeFiltered();
   buildCards();

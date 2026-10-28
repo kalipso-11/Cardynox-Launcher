@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Juegos bloqueados · Cardynox</title>
+  <link rel="stylesheet" href="blocked.css" />
+</head>
+<body>
+  <div id="blocked">
+    <header class="blk-head">
+      <h1 data-i18n="title">Juegos bloqueados</h1>
+      <p class="sub" data-i18n="sub">Juegos que sacaste del launcher. Podés re-habilitarlos desde acá.</p>
+    </header>
+
+    <div id="list" class="list"></div>
+
+    <div id="empty" class="empty" hidden>
+      <span class="empty-ico">✓</span>
+      <p data-i18n="empty">No hay juegos bloqueados.</p>
+    </div>
+
+    <p id="status" class="statusline" role="status"></p>
+  </div>
+
+  <!-- Cartel de confirmación: juego ya no está instalado en la ruta original -->
+  <div id="confirm" class="overlay" hidden>
+    <div class="dialog">
+      <h2 data-i18n="dlgTitle">El juego ya no está instalado</h2>
+      <p data-i18n="dlgBody">
+        El juego ya no está instalado en la ruta original. Se eliminará de esta
+        lista; instalalo de nuevo y volvelo a agregar desde el botón “Agregar”.
+      </p>
+      <div class="dlg-actions">
+        <button id="dlg-cancel" class="ghost" data-i18n="cancel">Cancelar</button>
+        <button id="dlg-accept" class="danger" data-i18n="accept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="blocked.js"></script>
+</body>
+</html>

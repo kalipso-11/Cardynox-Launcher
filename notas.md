@@ -932,3 +932,17 @@
 - **Build:** `cargo tauri build` (release, 0 warnings) + makensis. Instalador NSIS `Cardynox Launcher_0.1.0_x64-setup.exe` (~2.58 MiB); exe suelto ~11.4 MiB.
 - **Archivos tocados:** `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `notas.md`.
 - **Pendiente:** usuario instala el NSIS actualizado (el de Program Files aún trae la build previa SIN single-instance) y prueba: abrir 2ª copia → debe enfocarse la 1ª sin duplicar.
+
+## 2026-10-28 — Bandeja “Juegos bloqueados” + ventana para re-habilitar (check de instalación)
+- **Pedido del usuario:** opción nueva en la bandeja “Juegos Bloqueados” que liste los juegos quitados del launcher y permita volverlos a habilitar, en una **ventana independiente estilizada como “detalles”**. Al habilitar: si el juego sigue instalado en su ruta original → se re-agrega como antes; si NO → cartel de confirmación (“ya no está instalado… instalar y volver a agregar”), y al aceptar se borra de la lista.
+- **Almacenamiento (`lib.rs`):** `blocked_games` pasó de `Vec<String>` (solo ids) a `Vec<BlockedGame { id, name, source, exe, install_dir, app_id }` para poder mostrar nombre/plataforma y verificar la ruta. `deserialize_blocked_games` mantiene compatibilidad con configs viejas (string → nombre=id, source="unknown" → se muestra “Otros”; el config real tenía `manual-a9da6df2` legado y migra sin romperse). `remove_game` ahora captura metadatos vía `list_games(app.clone())` antes de bloquear.
+- **Comandos nuevos:**
+  - `get_blocked_games` → lista la lista negra.
+  - `unblock_game(id)` → `blocked_install_state`: exe → existe el archivo?; app_id Steam → re-escanear membresía; sin ninguno (legado) → "unknown". Si instalado/unknown → saca de la lista + emite `cardynox:games-changed`; si **no** está instalado → devuelve `reenabled=false` y NO toca nada (el cartel decide).
+  - `discard_blocked(id)` → purga tras aceptar el cartel.
+- **Ventana `blocked`:** `show_blocked_window()` (independiente, glass oscuro como `sgdb`, resizable, always_on_top). Frontend `ui/blocked.{html,css,js}`: lista con portada-iniciales, nombre, badge de plataforma; botón Habilitar por juego; overlay de confirmación para el caso no-instalado. i18n es/en completo.
+- **Integración con el gadget:** `ui/app.js` suma `refreshGames()` + listener de `cardynox:games-changed` → re-escanea y reconstruye el carrusel cuando se habilita/purga algo desde la ventana bloqueados (el juego re-agregado aparece sin reiniciar).
+- **Bandeja:** item “Juegos bloqueados”/“Blocked games” (texto se traduce en vivo con el idioma), entre SGDB y Cerrar. Capabilities: `"blocked"` agregado a `windows`.
+- **Verificación:** build limpia (0 warnings), release + NSIS 2.50 MiB; app lanzada OK (PID 30572) y single-instance intacto (2ª copia cede). Verificación visual de la ventana/cartel pendiente del usuario (sin acceso a pantalla).
+- **Archivos tocados:** `src-tauri/src/lib.rs`, `src-tauri/capabilities/default.json`, `ui/blocked.html`, `ui/blocked.css`, `ui/blocked.js`, `ui/app.js`, `notas.md`.
+- **Pendiente:** verificación visual del usuario (abrir la ventana, re-habilitar un juego instalado y uno no instalado) y commit git de esta feature.

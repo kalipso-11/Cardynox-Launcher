@@ -44,6 +44,51 @@ struct ManualGame {
     exe: String,
 }
 
+/// Un juego que el usuario "sacó" del launcher: se persiste con metadatos
+/// (nombre, fuente, exe, carpeta, appid) para listarlos en "Juegos bloqueados"
+/// y poder re-habilitarlos comprobando si siguen instalados. El escáner los
+/// descarta por `id`. NO toca lo instalado.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedGame {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+}
+
+/// Deserializa `blocked_games` tolerando el esquema legado (array de ids en
+/// texto) y el nuevo (array de objetos). Sin ruta/appid → se re-habilita directo.
+fn deserialize_blocked_games<'de, D>(d: D) -> Result<Vec<BlockedGame>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = serde_json::Value::deserialize(d)?;
+    let arr = match v.as_array() {
+        Some(a) => a,
+        None => return Ok(Vec::new()),
+    };
+    arr.iter()
+        .map(|item| match item {
+            serde_json::Value::String(id) => Ok(BlockedGame {
+                id: id.clone(),
+                name: id.clone(),
+                source: "unknown".into(),
+                exe: None,
+                install_dir: None,
+                app_id: None,
+            }),
+            obj => serde_json::from_value(obj.clone()).map_err(serde::de::Error::custom),
+        })
+        .collect()
+}
+
 /// Hash estable y simple (djb2) sobre los bytes de `s`. No necesita semilla:
 /// solo sirve para un id corto y determinístico por ruta de ejecutable.
 fn stable_hash(s: &str) -> u32 {
@@ -154,7 +199,7 @@ fn list_games(app: tauri::AppHandle) -> Vec<Game> {
     // 6) Quitar los juegos que el usuario sacó del launcher (blocklist persistente).
     if !cfg.blocked_games.is_empty() {
         let blocked: std::collections::HashSet<&str> =
-            cfg.blocked_games.iter().map(|s| s.as_str()).collect();
+            cfg.blocked_games.iter().map(|b| b.id.as_str()).collect();
         games.retain(|g| !blocked.contains(g.id.as_str()));
     }
 
@@ -324,8 +369,9 @@ fn add_game(name: String, exe: String, app: tauri::AppHandle) -> Result<Game, St
     })
 }
 
-/// Quita un juego del launcher sumando su game.id a la lista negra persistente.
-/// El escáner lo descarta en cada arranque; NO modifica el juego instalado.
+/// Quita un juego del launcher sumando su id a la lista negra persistente.
+/// Captura metadatos (nombre, fuente, exe, carpeta, appid) para la ventana
+/// "Juegos bloqueados" y la comprobación de instalación al re-habilitar.
 #[tauri::command]
 fn remove_game(id: String, app: tauri::AppHandle) -> Result<(), String> {
     let id = id.trim().to_string();
@@ -333,10 +379,100 @@ fn remove_game(id: String, app: tauri::AppHandle) -> Result<(), String> {
         return Err("Id de juego vacío".into());
     }
     let mut cfg = load_config(&app);
-    if !cfg.blocked_games.contains(&id) {
-        cfg.blocked_games.push(id.clone());
+    if !cfg.blocked_games.iter().any(|b| b.id == id) {
+        // El juego sigue en la lista actual: leer sus datos efectivos (con
+        // renames y overrides aplicados) para guardarlo de forma completa.
+        let meta = list_games(app.clone()).into_iter().find(|g| g.id == id);
+        let bg = match meta {
+            Some(g) => BlockedGame {
+                id: g.id,
+                name: g.name,
+                source: g.source,
+                exe: g.launch_path,
+                install_dir: g.install_dir,
+                app_id: g.app_id,
+            },
+            None => BlockedGame {
+                id,
+                name: String::new(),
+                source: "unknown".into(),
+                exe: None,
+                install_dir: None,
+                app_id: None,
+            },
+        };
+        cfg.blocked_games.push(bg);
         save_config(&app, &cfg);
     }
+    Ok(())
+}
+
+/// Lista los juegos bloqueados (sacados del launcher) para la ventana dedicada.
+#[tauri::command]
+fn get_blocked_games(app: tauri::AppHandle) -> Vec<BlockedGame> {
+    load_config(&app).blocked_games
+}
+
+/// Resultado de intentar re-habilitar un juego bloqueado.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnblockResult {
+    /// true si ya se quitó de la lista negra (re-habilitado / purgado).
+    reenabled: bool,
+    /// "installed" | "not_installed" | "unknown".
+    installed: String,
+}
+
+/// ¿El juego bloqueado sigue instalado en su ruta original?
+/// - Con `exe`: ¿existe el archivo?  - Con `app_id` (Steam): ¿sigue en la librería?
+/// - Ni lo uno ni lo otro (entrada legado): "unknown" → se re-habilita directo.
+fn blocked_install_state(bg: &BlockedGame) -> &'static str {
+    if let Some(exe) = &bg.exe {
+        return if std::path::Path::new(exe).exists() { "installed" } else { "not_installed" };
+    }
+    if let Some(app_id) = &bg.app_id {
+        let present = steam::scan().iter().any(|g| g.app_id.as_deref() == Some(app_id.as_str()));
+        return if present { "installed" } else { "not_installed" };
+    }
+    "unknown"
+}
+
+/// Re-habilita un juego bloqueado. Si sigue instalado (o no es verificable) → lo
+/// saca de la lista negra (reaparece en el carrusel) y `reenabled=true`. Si NO
+/// está instalado → NO lo toca (`reenabled=false`); el frontend muestra el cartel
+/// "ya no está instalado" y, al aceptarlo, llama a `discard_blocked(id)`.
+#[tauri::command]
+fn unblock_game(id: String, app: tauri::AppHandle) -> Result<UnblockResult, String> {
+    let id = id.trim().to_string();
+    if id.is_empty() {
+        return Err("Id de juego vacío".into());
+    }
+    let mut cfg = load_config(&app);
+    if !cfg.blocked_games.iter().any(|b| b.id == id) {
+        return Err("El juego no está en la lista bloqueada".into());
+    }
+    let state = blocked_install_state(cfg.blocked_games.iter().find(|b| b.id == id).unwrap());
+    if state != "not_installed" {
+        cfg.blocked_games.retain(|b| b.id != id);
+        save_config(&app, &cfg);
+        let _ = app.emit("cardynox:games-changed", ());
+        return Ok(UnblockResult { reenabled: true, installed: state.to_string() });
+    }
+    Ok(UnblockResult { reenabled: false, installed: "not_installed".to_string() })
+}
+
+/// Purga un juego de la lista negra sin comprobar nada (tras aceptar el cartel
+/// "ya no está instalado"): ya no aparece más en "Juegos bloqueados".
+#[tauri::command]
+fn discard_blocked(id: String, app: tauri::AppHandle) -> Result<(), String> {
+    let id = id.trim().to_string();
+    if id.is_empty() {
+        return Err("Id de juego vacío".into());
+    }
+    let mut cfg = load_config(&app);
+    cfg.blocked_games.retain(|b| b.id != id);
+    save_config(&app, &cfg);
+    let _ = app.emit("cardynox:games-changed", ());
     Ok(())
 }
 
@@ -489,6 +625,29 @@ fn show_sgdb_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     .center()
     .build()?;
     let _ = window.set_size(LogicalSize::new(540.0, 720.0));
+    let _ = window.set_focus();
+    Ok(())
+}
+
+/// Abre (o enfoca, si ya está abierta) la ventana de juegos bloqueados.
+/// Lista los juegos sacados del launcher y permite re-habilitarlos.
+fn show_blocked_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window("blocked") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let window = WebviewWindowBuilder::new(
+        app,
+        "blocked",
+        WebviewUrl::App("blocked.html".into()),
+    )
+    .title(if load_config(app).lang == "en" { "Blocked games · Cardynox" } else { "Juegos bloqueados · Cardynox" })
+    .center()
+    .resizable(true)
+    .build()?;
+    let _ = window.set_size(LogicalSize::new(620.0, 540.0));
     let _ = window.set_focus();
     Ok(())
 }
@@ -804,10 +963,11 @@ struct GadgetConfig {
     /// Se pasan al .exe al ejecutarlo (persistido). Backward compatible.
     #[serde(default)]
     launch_args: HashMap<String, String>,
-    /// Juegos que el usuario sacó del launcher: lista de game.id. El escáner
-    /// los descarta en cada arranque para no re-agregarlos. NO toca lo instalado.
-    #[serde(default)]
-    blocked_games: Vec<String>,
+    /// Juegos que el usuario sacó del launcher (con metadatos). El escáner los
+    /// descarta por id en cada arranque; NO toca lo instalado. Tolerante al
+    /// esquema legado (ids en texto) vía deserialize_with.
+    #[serde(default, deserialize_with = "deserialize_blocked_games")]
+    blocked_games: Vec<BlockedGame>,
     /// Juegos agregados manualmente desde el botón “Agregar” del gadget.
     /// Cada uno es `{ id, name, exe }`; persiste entre sesiones.
     #[serde(default)]
@@ -1246,6 +1406,7 @@ struct MenuState {
     // Items de idioma ("Español" / "English", cada uno en su propio idioma).
     lang_items: Vec<CheckMenuItem<Wry>>,
     sgdb: MenuItem<Wry>,
+    blocked: MenuItem<Wry>,
     quit: MenuItem<Wry>,
 }
 
@@ -1418,6 +1579,7 @@ fn relabel_menu(state: &MenuState, lang: &str) {
         item.set_text(if i == 0 { "Español" } else { "English" }).ok();
     }
     state.sgdb.set_text(if en { "Enable SGDB" } else { "Activar SGDB" }).ok();
+    state.blocked.set_text(if en { "Blocked games" } else { "Juegos bloqueados" }).ok();
     state.quit.set_text(if en { "Quit" } else { "Cerrar" }).ok();
 }
 
@@ -1615,6 +1777,16 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
+    // Opción "Juegos bloqueados": lista los juegos sacados del launcher y
+    // permite re-habilitarlos (ventana aparte). El label se traduce en vivo.
+    let blocked_item = MenuItem::with_id(
+        app,
+        "blocked",
+        if cfg.lang == "en" { "Blocked games" } else { "Juegos bloqueados" },
+        true,
+        None::<&str>,
+    )?;
+
     // Item Ocultar/Mostrar (primer item del menú; el texto se actualiza dinámicamente).
     let initial_vis_label = toggle_vis_label(&cfg.lang, true); // al arrancar siempre visible
     let toggle_vis_item = MenuItem::with_id(app, "toggle-vis", initial_vis_label, true, None::<&str>)?;
@@ -1639,6 +1811,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             &hidden_submenu as &dyn IsMenuItem<Wry>,
             &lang_submenu as &dyn IsMenuItem<Wry>,
             &sgdb_item as &dyn IsMenuItem<Wry>,
+            &blocked_item as &dyn IsMenuItem<Wry>,
             &quit as &dyn IsMenuItem<Wry>,
         ],
     )?;
@@ -1658,6 +1831,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         lang_submenu,
         lang_items,
         sgdb: sgdb_item,
+        blocked: blocked_item,
         quit,
     });
 
@@ -1719,6 +1893,11 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 "sgdb" => {
                     if let Err(e) = show_sgdb_window(app) {
                         eprintln!("[cardynox] No se pudo abrir la ventana de SGDB: {e}");
+                    }
+                }
+                "blocked" => {
+                    if let Err(e) = show_blocked_window(app) {
+                        eprintln!("[cardynox] No se pudo abrir la ventana de juegos bloqueados: {e}");
                     }
                 }
                 _ => {}
@@ -1795,7 +1974,10 @@ pub fn run() {
             remove_game,
             add_game,
             resolve_covers,
-            set_size_pct
+            set_size_pct,
+            get_blocked_games,
+            unblock_game,
+            discard_blocked
         ])
         .plugin(tauri_plugin_single_instance::init(|app_handle, _args, _cwd| {
             // Segunda instancia intentó arrancar: trae la ventana existente a
