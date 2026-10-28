@@ -1,6 +1,6 @@
 # Cardynox Launcher
 
-<img src="src-tauri/icons/capture.png" width="560" alt="Cardynox Launcher screenshot">
+<img src="src-tauri/icons/Capture.png" width="560" alt="Cardynox Launcher screenshot">
 
 ## English
 
