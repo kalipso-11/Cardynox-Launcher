@@ -1970,6 +1970,9 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     do_autostart(app, &state);
                 }
                 "quit" => {
+                    // Guardar posición final antes de salir (cubre el caso
+                    // donde el Moved handler no alcanzó a escribir).
+                    save_window_position(app);
                     app.exit(0);
                 }
                 id if id.starts_with("op-") => {
@@ -2151,6 +2154,33 @@ pub fn run() {
                             lf.store(now_ms, std::sync::atomic::Ordering::Relaxed);
                             log_size_correction(&h2, now_ms, cw, ch, w, h, scale);
                         }
+                    });
+                }
+
+                // FIX (posición no persistía tras reinicio): el Moved handler
+                // guarda la posición con debounce 300ms. Durante un drag,
+                // Windows dispara Moved por cada pixel; solo escribimos config
+                // si pasaron ≥300ms desde el último save. Al soltar el mouse,
+                // el último evento queda guardado (o lo captura el quit/hide).
+                {
+                    let h3 = apph.clone();
+                    let last_pos_save = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+                    window.on_window_event(move |event| {
+                        let tauri::WindowEvent::Moved(_pos) = event else { return };
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis() as u64)
+                            .unwrap_or(0);
+                        let last = last_pos_save.load(std::sync::atomic::Ordering::Relaxed);
+                        if now_ms.saturating_sub(last) < 300 {
+                            return;
+                        }
+                        // Debounce: solo escribe si pasaron 300ms.
+                        // Al terminar el drag (último Moved), se guarda.
+                        // Si el usuario cierra/reinicia antes, el save previo
+                        // del quit handler lo cubre.
+                        save_window_position(&h3);
+                        last_pos_save.store(now_ms, std::sync::atomic::Ordering::Relaxed);
                     });
                 }
 
