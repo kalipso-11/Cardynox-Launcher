@@ -2170,6 +2170,11 @@ pub fn run() {
                 }
 
                 let _ = window.show();
+
+                // FIX: Windows puede re-posicionar la ventana durante show()
+                // (especialmente con transparent + alwaysOnBottom). Re-aplicar
+                // la posición guardada inmediatamente tras hacerla visible.
+                restore_position(&window);
             }
             Ok(())
         })
