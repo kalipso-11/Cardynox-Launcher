@@ -602,7 +602,7 @@ function wrappedOffset(idx) {
   return off;
 }
 
-function layout() {
+function layout(carouselOffset = 0) {
   const visible = new Set();
 
   filtered.forEach((game, idx) => {
@@ -614,20 +614,59 @@ function layout() {
     const a = Math.abs(off);
     const sign = Math.sign(off);
 
-    let x = 0, scale = 1, rot = 0, opacity = 1, z = 30;
-    if (a === 0) {
-      card.classList.add("active");
+    // Calcular posición continua (incluye el offset del carrusel suave)
+    // Posiciones originales: 0, 130, 218, 275
+    let baseX;
+    if (a === 0) baseX = 0;
+    else if (a === 1) baseX = sign * 130;
+    else if (a === 2) baseX = sign * 218;
+    else baseX = sign * 275;
+    const continuousOff = baseX - carouselOffset;
+    const continuousA = Math.abs(continuousOff);
+    const continuousSign = Math.sign(continuousOff);
+
+    // Interpolar scale y rotación basados en la distancia continua
+    let scale, rot, opacity, z;
+    if (continuousA < 130) {
+      // Entre centro y primera posición lateral
+      const t = continuousA / 130; // 0..1
+      scale = 1 - t * 0.18; // 1..0.82
+      rot = continuousSign * t * 18; // 0..18
+      opacity = 1 - t * 0.25; // 1..0.75
+      z = 30;
+    } else if (continuousA < 218) {
+      // Entre primera y segunda posición lateral
+      const t = (continuousA - 130) / 88; // 0..1
+      scale = 0.82 - t * 0.16; // 0.82..0.66
+      rot = continuousSign * (18 + t * 8); // 18..26
+      opacity = 0.75 - t * 0.37; // 0.75..0.38
+      z = 20;
+    } else if (continuousA < 275) {
+      // Entre segunda y tercera posición lateral (casi transparente)
+      const t = (continuousA - 218) / 57; // 0..1
+      scale = 0.66 - t * 0.06; // 0.66..0.6
+      rot = continuousSign * (26 + t * 4); // 26..30
+      opacity = 0.38 - t * 0.38; // 0.38..0
+      z = 10;
     } else {
-      card.classList.remove("active");
-      // Offsets calibrados para la ventana de 620px
-      // (ancho útil del stage ≈ 596px, tarjeta activa de 126px).
-      if (a === 1) { x = sign * 146; scale = 0.82; rot = -sign * 18; opacity = 0.75; z = 20; }
-      else if (a === 2) { x = sign * 240; scale = 0.66; rot = -sign * 26; opacity = 0.38; z = 10; }
-      else { x = sign * 305; scale = 0.6; rot = -sign * 30; opacity = 0; z = 1; }
-      card.style.pointerEvents = a > 2 ? "none" : "auto";
+      // Más allá de la tercera posición lateral (invisible)
+      scale = 0.6;
+      rot = continuousSign * 30;
+      opacity = 0;
+      z = 1;
     }
 
-    card.style.transform = `translateX(${x}px) scale(calc(${scale} * var(--hs, 1))) rotateY(${rot}deg)`;
+    // Determinar si la tarjeta es activa (la más cercana al centro)
+    const isActive = Math.abs(off) === 0 && Math.abs(carouselOffset) < 73;
+    if (isActive) {
+      card.classList.add("active");
+      card.style.pointerEvents = "auto";
+    } else {
+      card.classList.remove("active");
+      card.style.pointerEvents = continuousA > 240 ? "none" : "auto";
+    }
+
+    card.style.transform = `translateX(${continuousOff}px) scale(calc(${scale} * var(--hs, 1))) rotateY(${rot}deg)`;
     card.style.opacity = String(opacity);
     card.style.zIndex = String(z);
 
@@ -672,15 +711,16 @@ function step(dir) {
 
 // ---------------------------------------------------------------------------
 // Animación automática de portadas (toggle "Animar Portadas" en la bandeja).
-// Las tarjetas avanzan solas de derecha a izquierda reutilizando la transición
-// CSS de .card vía setActive(). Se PAUSA cuando el usuario interactúa (click en
-// una portada o búsqueda) y se REANUDA solo tras un rato sin tocar nada.
+// Carrusel circular continuo: las tarjetas se mueven en un círculo sin saltos.
+// Usa un scrollPos continuo que determina la posición de cada tarjeta.
+// No afecta la navegación manual. Se PAUSA al interactuar, REANUDA tras 6s.
 // ---------------------------------------------------------------------------
-const AUTO_ANIMATE_STEP_MS = 3000; // un paso cada ~3 s ("muy despacio")
+const AUTO_ANIMATE_SPEED = 0.15; // px por frame (~9 px/s a 60fps, muy lento)
+const AUTO_ANIMATE_CARD_WIDTH = 130; // ancho entre centros de tarjetas
 const AUTO_ANIMATE_RESUME_MS = 6000; // reintenta tras 6 s sin interacción
 let autoAnimate = false; // estado desde la bandeja (persistido)
 let autoRafId = null; // rAF activo del auto-avance
-let autoLastStepAt = 0; // timestamp del último paso automático
+let autoScrollPos = 0; // posición de scroll continua (no se resetea)
 let autoResumeAt = 0; // hasta qué timestamp queda pausada
 
 function setAutoAnimate(on) {
@@ -690,16 +730,23 @@ function setAutoAnimate(on) {
 
 function startAutoAnimate() {
   if (autoRafId != null) return;
-  autoLastStepAt = 0; // fuerza un paso inmediato al activar (feedback visual)
+  // Iniciar el scrollPos en la posición actual del índice activo
+  autoScrollPos = active * AUTO_ANIMATE_CARD_WIDTH;
   const loop = (ts) => {
-    if (
-      autoAnimate &&
-      filtered.length > 1 &&
-      ts >= autoResumeAt &&
-      ts - autoLastStepAt >= AUTO_ANIMATE_STEP_MS
-    ) {
-      autoLastStepAt = ts;
-      setActive(active + 1); // entra por la derecha, sale por la izquierda
+    if (autoAnimate && filtered.length > 1 && ts >= autoResumeAt) {
+      autoScrollPos += AUTO_ANIMATE_SPEED;
+      // Determinar qué tarjeta está en el centro (la más cercana al scrollPos)
+      const centerIdx = Math.round(autoScrollPos / AUTO_ANIMATE_CARD_WIDTH) % filtered.length;
+      if (centerIdx !== active) {
+        active = centerIdx;
+        // Actualizar el nombre activo y el botón play
+        const current = filtered[active];
+        activeName.textContent = current ? current.name : "Sin resultados";
+        document.getElementById("btn-play").disabled = !current;
+      }
+      // Calcular el offset relativo al centro para el layout
+      const offset = autoScrollPos - active * AUTO_ANIMATE_CARD_WIDTH;
+      layout(offset);
     }
     autoRafId = requestAnimationFrame(loop);
   };
@@ -708,6 +755,7 @@ function startAutoAnimate() {
 
 function stopAutoAnimate() {
   if (autoRafId != null) { cancelAnimationFrame(autoRafId); autoRafId = null; }
+  layout(0); // resetear posiciones
 }
 
 /** Pausa temporal: el usuario tocó algo (click en portada o búsqueda). */
@@ -846,14 +894,32 @@ function bindEvents() {
         !document.getElementById("add-overlay").hidden) return;
     e.preventDefault();
     const dir = Math.abs(e.deltaY) > 8 ? Math.sign(e.deltaY) : 0;
-    if (dir !== 0) step(dir);
+    if (dir !== 0) {
+      autoAnimatePause();
+      step(dir);
+    }
   }, { passive: false });
 
   // Buscador en vivo. Escribir pausa la animación automática (es una búsqueda).
+  let searchIdleTimer = null;
+  const SEARCH_IDLE_MS = 60000; // 1 minuto sin actividad → limpiar búsqueda
+  function resetSearchIdle() {
+    if (searchIdleTimer) clearTimeout(searchIdleTimer);
+    searchIdleTimer = setTimeout(() => {
+      if (searchInput.value.trim()) {
+        searchInput.value = "";
+        applyFilter();
+        autoAnimatePause();
+      }
+    }, SEARCH_IDLE_MS);
+  }
   searchInput.addEventListener("input", () => {
     applyFilter();
     autoAnimatePause();
+    resetSearchIdle();
   });
+  searchInput.addEventListener("focus", resetSearchIdle);
+  searchInput.addEventListener("click", resetSearchIdle);
   // Cruz para limpiar la búsqueda: borra el texto y re-filtra (vuelve a mostrar todos).
   searchClear.addEventListener("click", () => {
     searchInput.value = "";
@@ -902,15 +968,15 @@ function bindEvents() {
     if (e.key === "Escape" && !document.getElementById("details-overlay").hidden) {
       hideDetails(); return;
     }
-    if (e.key === "ArrowRight") { step(1); e.preventDefault(); }
-    else if (e.key === "ArrowLeft") { step(-1); e.preventDefault(); }
+    if (e.key === "ArrowRight") { autoAnimatePause(); step(1); e.preventDefault(); }
+    else if (e.key === "ArrowLeft") { autoAnimatePause(); step(-1); e.preventDefault(); }
     else if (e.key === "Enter" && document.activeElement !== searchInput &&
-             !document.getElementById("details-overlay").hidden === false) playActive();
+             !document.getElementById("details-overlay").hidden === false) { autoAnimatePause(); playActive(); }
   });
 
   // Botones de acción.
-  document.getElementById("btn-play").addEventListener("click", playActive);
-  document.getElementById("btn-details").addEventListener("click", showDetails);
+  document.getElementById("btn-play").addEventListener("click", () => { autoAnimatePause(); playActive(); });
+  document.getElementById("btn-details").addEventListener("click", () => { autoAnimatePause(); showDetails(); });
   // Botón “Agregar”: abre el overlay vacío para cargar un juego manual.
   document.getElementById("btn-add")?.addEventListener("click", openAddOverlay);
 
