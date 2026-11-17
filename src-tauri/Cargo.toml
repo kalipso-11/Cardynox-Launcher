@@ -23,3 +23,5 @@ winreg = "0.56"
 # default-tls → SChannel en Windows: sin OpenSSL ni compilador C extra.
 reqwest = { version = "0.12", default-features = false, features = ["json", "default-tls"] }
 tauri-plugin-single-instance = "2"
+# Diálogo nativo de archivo (reemplaza al selector PowerShell de pick_exe).
+tauri-plugin-dialog = "2"

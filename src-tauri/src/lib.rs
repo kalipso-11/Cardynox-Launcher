@@ -3,6 +3,7 @@ mod steam;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tauri_plugin_dialog::DialogExt;
 use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{
@@ -304,20 +305,19 @@ fn set_launch_exe(id: String, exe_path: String, app: tauri::AppHandle) -> Result
     Ok(())
 }
 
-/// Abre un diálogo nativo de Windows para elegir el .exe de un juego "Otros".
-/// Devuelve la ruta elegida o None si se cancela. Sin dependencias nuevas: reutiliza
-/// PowerShell + System.Windows.Forms (mismo patrón que open_external con explorer).
+/// Abre el diálogo nativo de Windows (IFileDialog vía tauri-plugin-dialog) para
+/// elegir el .exe de un juego. Devuelve la ruta elegida o None si se cancela.
+/// Reemplaza al selector anterior por PowerShell: abre al instante, sin consola
+/// intermedia ni demora de arranque.
 #[tauri::command]
-fn pick_exe() -> Result<Option<String>, String> {
-    // Script de una sola línea: PowerShell + System.Windows.Forms abre un file dialog
-    // nativo (filtro .exe por defecto). Devuelve la ruta por stdout; vacío si se cancela.
-    let script = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Ejecutables (*.exe)|*.exe|Todos los archivos (*.*)|*.*'; $d.Title='Elegir ejecutable'; if($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK){Write-Output $d.FileName}";
-    let out = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", script])
-        .output()
-        .map_err(|e| format!("No se pudo abrir el selector: {e}"))?;
-    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    Ok(if stdout.is_empty() { None } else { Some(stdout) })
+fn pick_exe(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let file = app
+        .dialog()
+        .file()
+        .set_title("Elegir ejecutable")
+        .add_filter("Ejecutables (*.exe)", &["exe"])
+        .blocking_pick_file();
+    Ok(file.and_then(|p| p.as_path().map(|s| s.to_string_lossy().to_string())))
 }
 
 /// Guarda los argumentos de lanzamiento de un juego "Otros" (game.id → args).
@@ -2167,6 +2167,7 @@ pub fn run() {
             unblock_game,
             discard_blocked
         ])
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app_handle, _args, _cwd| {
             // Segunda instancia intentó arrancar: trae la ventana existente a
             // primer plano (show + unminimize + focus) en vez de crear un gadget nuevo.
