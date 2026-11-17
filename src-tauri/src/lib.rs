@@ -1098,7 +1098,7 @@ struct GadgetConfig {
     #[serde(default)]
     covers: HashMap<String, String>,
     /// Directorios raíz a escanear para juegos no-Steam (folder scan).
-    /// Ej: ["D:\\Juegos", "E:\\Games"] — se buscan subcarpetas con .exe.
+    /// Ej: ["D:\\Games", "E:\\Juegos"] — se buscan subcarpetas con .exe.
     #[serde(default)]
     scan_roots: Vec<String>,
     /// Portadas auto-resueltas para juegos no-Steam: game.id → cover.

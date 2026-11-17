@@ -510,16 +510,15 @@ fn scan_heroic() -> Vec<Game> {
 // ===========================================================================
 
 /// Chequea `X:\XboxGames\*` y `X:\Program Files\ModifiableWindowsApps\*`
-/// para cada drive C-H. Excluye GameSave y Minecraft Launcher.
+/// en cada drive fijo del sistema (no extraíbles/red). Excluye GameSave y
+/// Minecraft Launcher.
 fn scan_xbox() -> Vec<Game> {
     let mut out = Vec::new();
     const NOT_GAMES: [&str; 2] = ["gamesave", "minecraft launcher"];
 
-    for letter in b'C'..=b'H' {
-        let drive = format!("{}:", (letter as char).to_lowercase());
-
+    for drive in fixed_drive_roots() {
         // X:\XboxGames\*
-        let xbox_root = PathBuf::from(format!("{drive}\\XboxGames"));
+        let xbox_root = drive.join("XboxGames");
         if xbox_root.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&xbox_root) {
                 for entry in entries.flatten() {
@@ -551,7 +550,7 @@ fn scan_xbox() -> Vec<Game> {
         }
 
         // X:\Program Files\ModifiableWindowsApps\*
-        let mwa_root = PathBuf::from(format!("{drive}\\Program Files\\ModifiableWindowsApps"));
+        let mwa_root = drive.join("Program Files").join("ModifiableWindowsApps");
         if mwa_root.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&mwa_root) {
                 for entry in entries.flatten() {
@@ -615,7 +614,7 @@ const SKIP_DESCEND: [&str; 10] = [
 ];
 
 /// Niveles bajo la base hasta donde el walk inspecciona (sus hijos).
-/// Con 3 se ven carpetas del nivel 4 (p. ej. `Juegos\ACE\Game\Binaries\Win64\juego.exe`)
+/// Con 3 se ven carpetas del nivel 4 (p. ej. `Games\Título\Game\Binaries\Win64\juego.exe`)
 /// y se detiene ahí.
 const MAX_GAME_DEPTH: usize = 3;
 

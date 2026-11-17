@@ -75,15 +75,75 @@ pub fn demo_games() -> Vec<Game> {
         .collect()
 }
 
+/// Busca la ruta de instalación de Steam en el registro de Windows. El
+/// cliente la declara en `InstallPath` bajo `Valve\Steam` (vista de 64 y de
+/// 32 bits de HKLM, más HKCU). Funciona con cualquier ubicación de
+/// instalación, sin asumir rutas estándar.
+fn steam_registry_roots() -> Vec<PathBuf> {
+    extern "system" {
+        fn RegGetValueW(
+            hkey: *mut std::ffi::c_void,
+            lpsubkey: *const u16,
+            uloptions: u32,
+            lpvalue: *const u16,
+            pvtype: *mut u32,
+            pvdata: *mut std::ffi::c_void,
+            pcbdata: *mut u32,
+        ) -> i32;
+    }
+
+    // Manijas predefinidas canónicas: HKEY_LOCAL_MACHINE / HKEY_CURRENT_USER.
+    let keys: &[(*mut std::ffi::c_void, &str)] = &[
+        (0x80000002 as *mut _, "SOFTWARE\\Valve\\Steam"),              // HKLM 64-bit
+        (0x80000002 as *mut _, "SOFTWARE\\WOW6432Node\\Valve\\Steam"), // HKLM 32-bit
+        (0x80000001 as *mut _, "SOFTWARE\\Valve\\Steam"),              // HKCU
+    ];
+
+    let mut roots = Vec::new();
+    for &(root, subkey) in keys {
+        let sub: Vec<u16> = subkey.encode_utf16().chain(std::iter::once(0)).collect();
+        let val: Vec<u16> = "InstallPath".encode_utf16().chain(std::iter::once(0)).collect();
+
+        // 1) Consultar el tamaño del valor.
+        let mut cb: u32 = 0;
+        let rc = unsafe {
+            RegGetValueW(root, sub.as_ptr(), 0, val.as_ptr(), std::ptr::null_mut(), std::ptr::null_mut(), &mut cb)
+        };
+        if rc != 0 || cb < 4 || cb % 2 != 0 {
+            continue;
+        }
+
+        // 2) Leer el valor (REG_SZ wide).
+        let mut buf = vec![0u8; cb as usize];
+        let rc = unsafe {
+            RegGetValueW(root, sub.as_ptr(), 0, val.as_ptr(), std::ptr::null_mut(), buf.as_mut_ptr().cast::<std::ffi::c_void>(), &mut cb)
+        };
+        if rc != 0 {
+            continue;
+        }
+
+        let n = (cb / 2) as usize;
+        let wide: Vec<u16> = buf[0..n * 2].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        let end = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
+        let mut path = String::from_utf16_lossy(&wide[..end]);
+        while path.ends_with('\\') {
+            path.pop();
+        }
+        if !path.is_empty() {
+            roots.push(PathBuf::from(path));
+        }
+    }
+    roots
+}
+
 /// Rutas raíz de las librerías de Steam (instalación + carpetas adicionales
 /// declaradas en `libraryfolders.vdf`), sin duplicados.
 fn library_paths() -> Vec<PathBuf> {
     let mut bases: Vec<PathBuf> = Vec::new();
-    // Ubicaciones estándar de Windows. No depender solo de variables de
-    // entorno: en algunos sistemas PROGRAMFILES(X86) no está presente y el
-    // escáner se quedaría ciego, aunque Steam esté instalado ahí.
-    bases.push(PathBuf::from(r"C:\Program Files (x86)\Steam"));
-    bases.push(PathBuf::from(r"C:\Program Files\Steam"));
+    // 1) Registro: donde el propio cliente declara estar instalado (cualquier
+    //    ubicación, sin asumir rutas estándar).
+    bases.extend(steam_registry_roots());
+    // 2) Variables de entorno (instalaciones estándar).
     if let Ok(pf86) = std::env::var("PROGRAMFILES(X86)") {
         bases.push(PathBuf::from(pf86).join("Steam"));
     }
@@ -95,6 +155,9 @@ fn library_paths() -> Vec<PathBuf> {
         // ahí vive un Steam portátil.
         bases.push(PathBuf::from(local).join("Steam"));
     }
+    // 3) Ubicaciones estándar de Windows como último recurso.
+    bases.push(PathBuf::from(r"C:\Program Files (x86)\Steam"));
+    bases.push(PathBuf::from(r"C:\Program Files\Steam"));
 
     let mut libs: Vec<PathBuf> = Vec::new();
     for base in &bases {
@@ -140,8 +203,8 @@ fn parse_acf(content: &str) -> Option<(String, String, bool)> {
 
 /// Extrae las rutas de librería de `libraryfolders.vdf`. El formato real es
 /// anidado: cada índice numérico contiene un bloque con su propia línea
-/// `"path" "D:\Juegos\Steam"`, así que simplemente recolectamos todas las
-/// líneas cuyo valor corresponde a la clave `path`.
+/// `"path" "C:\\Steam"` (la ruta de una librería), así que simplemente
+/// recolectamos todas las líneas cuyo valor corresponde a la clave `path`.
 fn parse_library_folders(content: &str) -> Vec<PathBuf> {
     content
         .lines()
@@ -212,7 +275,7 @@ fn quoted_strings(s: &str) -> Vec<String> {
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDetails {
-    /// Ruta completa del directorio de instalación (ej: `D:\Juegos\Steam\steamapps\common\EldenRing`).
+    /// Ruta completa del directorio de instalación (ej: `C:\\Steam\\steamapps\\common\\EldenRing`).
     pub install_path: Option<String>,
     /// Tamaño en disco (bytes). None si no está disponible.
     pub disk_size_bytes: Option<u64>,
@@ -427,12 +490,12 @@ mod tests {
 	}
 	"1"
 	{
-		"path"		"D:\\Juegos\\Steam"
+		"path"		"D:\\Steam"
 		"label"		""
 	}
 	"2"
 	{
-		"path"		"M:\\Steam"
+		"path"		"E:\\Steam"
 		"label"		""
 	}
 }
@@ -440,6 +503,7 @@ mod tests {
         let paths = parse_library_folders(vdf);
         assert_eq!(paths.len(), 3);
         assert!(paths[0].ends_with("Steam"));
-        assert!(paths[1].ends_with(r"Juegos\Steam"));
+        assert!(paths[1].ends_with(r"D:\\Steam"));
+        assert!(paths[2].ends_with(r"E:\\Steam"));
     }
 }
