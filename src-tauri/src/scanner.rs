@@ -583,78 +583,185 @@ fn scan_xbox() -> Vec<Game> {
 }
 
 // ===========================================================================
-// Carpetas tipo "Games" / "Juegos" en drives locales
+// Carpetas tipo "Games" / "Juegos" en drives locales (scan recursivo)
 // ===========================================================================
 
-/// Escanea directorios llamados "Games" o "Juegos" en cada drive.
-/// Aplica blacklist de carpetas de launcher que no son juegos.
+/// JUNK: subcarpetas que son librerías de launchers o contenido no-juego.
+/// Nunca se tratan como juego ni se desciende en ellas.
+const JUNK: [&str; 31] = [
+    "steamlibrary", "steamapps", "epic games", "gog galaxy", "ea games", "ubisoft",
+    "xboxgames", "amazon games", "battle.net", "common", "riot games",
+    "rockstar games", "steam", "downloads", "download", "cache", "temp", "tmp",
+    "logs", "log", "user", "scripts", "docs", "documentation", "license",
+    "licenses", "readme", "redist", "redists", "vcruntime", "runtimes",
+];
+
+/// GENERIC: nombres de carpetas técnicas genéricas (bin, x64, Game, Win64…).
+/// Si un juego vive dentro, la tarjeta usa el nombre del ancestro no genérico
+/// más cercano (para que no se llame "bin" ni "Win64").
+const GENERIC_DIR_NAMES: [&str; 35] = [
+    "bin", "bin32", "bin64", "binaries", "x32", "x64", "win32", "win64",
+    "files", "data", "game", "games", "app", "program", "programs", "redist",
+    "common", "engine", "lib", "lib64", "win", "windows", "dist", "build",
+    "release", "src", "assets", "content", "media", "patches", "core",
+    "system", "tools", "internal", "sdk",
+];
+
+/// SKIP_DESCEND: carpetas de assets/datos (sobre todo Unreal Engine) que
+/// nunca contienen el .exe de un juego. No se desciende en ellas (perf).
+const SKIP_DESCEND: [&str; 10] = [
+    "content", "assets", "shaders", "media", "plugins", "config",
+    "localization", "sounds", "music", "videos",
+];
+
+/// Niveles bajo la base hasta donde el walk inspecciona (sus hijos).
+/// Con 3 se ven carpetas del nivel 4 (p. ej. `Juegos\ACE\Game\Binaries\Win64\juego.exe`)
+/// y se detiene ahí.
+const MAX_GAME_DEPTH: usize = 3;
+
+/// Raíces de los drives fijos del sistema (`c:\\`, `d:\\`, …), excluyendo
+/// extraíbles, CD/DVD, red y RAM (los de red pueden colgar el scan).
+/// Letra en minúscula: las rutas resultantes — y los ids derivados de ellas —
+/// quedan estables con lo que generaban las versiones anteriores.
+fn fixed_drive_roots() -> Vec<PathBuf> {
+    extern "system" {
+        fn GetLogicalDrives() -> u32;
+        fn GetDriveTypeW(lp_root_path_name: *const u16) -> u32;
+    }
+
+    const DRIVE_FIXED: u32 = 3;
+    let mask = unsafe { GetLogicalDrives() };
+    let mut roots = Vec::new();
+    for letter in b'A'..=b'Z' {
+        if mask & (1 << (letter - b'A')) == 0 {
+            continue;
+        }
+        let root = format!("{}:\\", (letter as char).to_ascii_lowercase());
+        let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+        let drive_type = unsafe { GetDriveTypeW(wide.as_ptr()) };
+        if drive_type == DRIVE_FIXED {
+            roots.push(PathBuf::from(root));
+        }
+    }
+    roots
+}
+
+/// Recorrido recursivo de un contenedor de juegos.
+///
+/// Reglas:
+/// - Una subcarpeta con su propio .exe "principal" de más de 5MB es un juego:
+///   crea tarjeta y no desciende. Si su nombre es genérico, la tarjeta usa el
+///   nombre (`display_name`) y la carpeta (`display_root`) del ancestro no
+///   genérico más cercano.
+/// - Una carpeta sin exe principal es contenedor: se desciende en ella hasta
+///   MAX_GAME_DEPTH, propagando el nombre de exhibición mientras la carpeta
+///   es genérica.
+/// - Se saltan carpetas JUNK, SKIP_DESCEND y nombres que empiezan con "." o "_".
+///
+/// `id_prefix` + `id_hex` arman el id del juego:
+/// `"folder-" + decimal` o `"dir-" + hex 8 dígitos` (formatos de siempre).
+fn walk_game_tree(
+    base: &Path,
+    display_name: &str,
+    display_root: &Path,
+    out: &mut Vec<Game>,
+    depth: usize,
+    id_prefix: &str,
+    id_hex: bool,
+) {
+    if depth > MAX_GAME_DEPTH {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let name_lower = dir.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+        if name_lower.starts_with('.')
+            || name_lower.starts_with('_')
+            || JUNK.contains(&name_lower.as_str())
+        {
+            continue;
+        }
+
+        // ¿Es un juego? (su propio exe principal de más de 5MB)
+        match find_main_exe(&dir) {
+            Some(exe) if std::fs::metadata(&exe).map(|m| m.len() > 5_000_000).unwrap_or(false) => {
+                let generic = GENERIC_DIR_NAMES.contains(&name_lower.as_str());
+                let (display, install) = if generic {
+                    (display_name.to_string(), display_root.to_string_lossy().to_string())
+                } else {
+                    (
+                        dir.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                        dir.to_string_lossy().to_string(),
+                    )
+                };
+                let hash = path_hash(&exe);
+                let id = if id_hex {
+                    format!("{id_prefix}{hash:08x}")
+                } else {
+                    format!("{id_prefix}{hash}")
+                };
+                out.push(Game {
+                    id,
+                    name: display,
+                    app_id: None,
+                    source: "Folder".into(),
+                    launch_path: Some(exe),
+                    install_dir: Some(install),
+                });
+                continue; // juego: no descender
+            }
+            _ => {}
+        }
+
+        // Contenedor: descender (sin pasar el límite de profundidad).
+        if SKIP_DESCEND.contains(&name_lower.as_str()) {
+            continue;
+        }
+        let generic = GENERIC_DIR_NAMES.contains(&name_lower.as_str());
+        let (child_display, child_root) = if generic {
+            (display_name.to_string(), display_root.to_path_buf())
+        } else {
+            (
+                dir.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                dir.clone(),
+            )
+        };
+        walk_game_tree(
+            &dir,
+            &child_display,
+            &child_root,
+            out,
+            depth + 1,
+            id_prefix,
+            id_hex,
+        );
+    }
+}
+
+/// Escanea las carpetas "Games", "Juegos" y "SteamLibrary" de TODOS los
+/// drives fijos del sistema (no solo C–H; excluye extraíbles/red), de forma
+/// recursiva hasta MAX_GAME_DEPTH.
 fn scan_game_folders() -> Vec<Game> {
     let mut out = Vec::new();
 
-    // Blacklist: subcarpetas que son librerías de launchers, no juegos.
-    const JUNK: [&str; 12] = [
-        "steamlibrary", "steamapps", "epic games", "gog galaxy",
-        "ea games", "ubisoft", "xboxgames", "amazon games",
-        "battle.net", "common", "riot games", "rockstar games",
-    ];
-
-    // Nombres de carpetas a buscar.
+    // Nombres de carpetas a buscar en cada drive.
     const FOLDER_NAMES: [&str; 3] = ["Games", "Juegos", "SteamLibrary"];
 
-    for letter in b'C'..=b'H' {
-        let drive = format!("{}:", (letter as char).to_lowercase());
-
+    for root in fixed_drive_roots() {
         for folder_name in &FOLDER_NAMES {
-            let base = PathBuf::from(format!("{drive}\\{folder_name}"));
+            let base = root.join(folder_name);
             if !base.is_dir() {
                 continue;
             }
-
-            if let Ok(entries) = std::fs::read_dir(&base) {
-                for entry in entries.flatten() {
-                    let dir = entry.path();
-                    if !dir.is_dir() {
-                        continue;
-                    }
-
-                    let name_lower = dir.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-                    if JUNK.contains(&name_lower.as_str()) {
-                        continue;
-                    }
-
-                    // Buscar .exe en el directorio (nivel 0 y 1).
-                    let exe = find_main_exe(&dir).or_else(|| {
-                        std::fs::read_dir(&dir)
-                            .ok()
-                            .and_then(|sub| {
-                                sub.flatten().find_map(|se| {
-                                    let sp = se.path();
-                                    if sp.is_dir() {
-                                        find_main_exe(&sp)
-                                    } else {
-                                        None
-                                    }
-                                })
-                            })
-                    });
-
-                    let Some(exe_path) = exe else { continue };
-
-                    // Filtro mínimo: exe debe pesar >5MB (descarta stubs).
-                    if std::fs::metadata(&exe_path).map(|m| m.len() < 5_000_000).unwrap_or(true) {
-                        continue;
-                    }
-
-                    out.push(Game {
-                        id: format!("folder-{}", path_hash(&exe_path)),
-                        name: dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
-                        app_id: None,
-                        source: "Folder".into(),
-                        launch_path: Some(exe_path),
-                        install_dir: Some(dir.to_string_lossy().to_string()),
-                    });
-                }
-            }
+            let base_display = base.file_name().unwrap_or_default().to_string_lossy().to_string();
+            walk_game_tree(&base, &base_display, &base, &mut out, 0, "folder-", false);
         }
     }
     out
@@ -667,7 +774,7 @@ fn scan_game_folders() -> Vec<Game> {
 /// Escanea una lista de directorios raíz configurados por el usuario.
 pub fn scan_directories(roots: &[String]) -> Vec<Game> {
     let mut games = Vec::new();
-    let mut seen = HashSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
 
     for root in roots {
         let root_path = Path::new(root);
@@ -675,55 +782,24 @@ pub fn scan_directories(roots: &[String]) -> Vec<Game> {
             continue;
         }
 
-        let Ok(entries) = std::fs::read_dir(root_path) else { continue };
+        let base_display = root_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| root.clone());
 
-        for entry in entries.flatten() {
-            let dir_path = entry.path();
-            if !dir_path.is_dir() {
-                continue;
+        let mut found = Vec::new();
+        walk_game_tree(root_path, &base_display, root_path, &mut found, 0, "dir-", true);
+
+        // Dedup local por exe (scan_roots puede solaparse entre sí).
+        for g in found {
+            if let Some(exe) = &g.launch_path {
+                let norm = exe.to_lowercase();
+                if seen.insert(norm) {
+                    games.push(g);
+                }
+            } else {
+                games.push(g);
             }
-
-            let exe = find_main_exe(&dir_path).or_else(|| {
-                std::fs::read_dir(&dir_path)
-                    .ok()
-                    .and_then(|sub| {
-                        sub.flatten().find_map(|se| {
-                            let sp = se.path();
-                            if sp.is_dir() {
-                                find_main_exe(&sp)
-                            } else {
-                                None
-                            }
-                        })
-                    })
-            });
-
-            let Some(exe_path) = exe else { continue };
-
-            // Filtro >5MB.
-            if std::fs::metadata(&exe_path).map(|m| m.len() < 5_000_000).unwrap_or(true) {
-                continue;
-            }
-
-            let exe_norm = exe_path.to_lowercase();
-            if seen.contains(&exe_norm) {
-                continue;
-            }
-            seen.insert(exe_norm);
-
-            let game_name = dir_path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "Juego".into());
-
-            games.push(Game {
-                id: format!("dir-{:08x}", path_hash(&exe_path)),
-                name: game_name,
-                app_id: None,
-                source: "Folder".into(),
-                launch_path: Some(exe_path),
-                install_dir: Some(dir_path.to_string_lossy().to_string()),
-            });
         }
     }
 
@@ -783,12 +859,16 @@ fn find_main_exe(dir: &Path) -> Option<String> {
             if !name.ends_with(".exe") {
                 continue;
             }
-            // Saltar conocidos no-juegos.
+            // Saltar conocidos no-juegos (herramientas de crash report,
+            // instaladores, updaters…).
             if name.starts_with("uninstall")
                 || name == "unins000.exe"
                 || name.starts_with("setup")
                 || name == "launcher.exe"
                 || name == "update.exe"
+                || name.contains("crashreport")
+                || name.contains("crashpad")
+                || name.contains("crashhandler")
             {
                 continue;
             }

@@ -197,11 +197,52 @@ fn list_games(app: tauri::AppHandle) -> Vec<Game> {
         }
     }
 
-    // 6) Quitar los juegos que el usuario sacó del launcher (blocklist persistente).
+    // 6) Quitar los juegos que el usuario sacó del launcher (blocklist
+    //    persistente). Se filtra por:
+    //    - id: la misma tarjeta sigue oculta.
+    //    - .exe: si se re-detecta con otro id (el escáner ahora busca más a
+    //      fondo o en otro disco), sigue oculto.
+    //    - carpeta de instalación: si el scan halla otro .exe del mismo juego
+    //      en la misma carpeta (p. ej. el exe real en una subcarpeta "bin"),
+    //      también sigue oculto. Los juegos manuales (acción explícita del
+    //      usuario) quedan exentos de la regla de carpeta.
     if !cfg.blocked_games.is_empty() {
-        let blocked: std::collections::HashSet<&str> =
+        let blocked_ids: std::collections::HashSet<&str> =
             cfg.blocked_games.iter().map(|b| b.id.as_str()).collect();
-        games.retain(|g| !blocked.contains(g.id.as_str()));
+        let blocked_exes: std::collections::HashSet<String> = cfg
+            .blocked_games
+            .iter()
+            .filter_map(|b| b.exe.as_deref())
+            .map(|e| e.to_lowercase())
+            .collect();
+        let blocked_dirs: Vec<String> = cfg
+            .blocked_games
+            .iter()
+            .filter_map(|b| b.install_dir.as_deref())
+            .map(|d| d.trim_end_matches(['\\', '/']).to_lowercase())
+            .filter(|d| !d.is_empty())
+            .collect();
+        games.retain(|g| {
+            if blocked_ids.contains(g.id.as_str()) {
+                return false;
+            }
+            if let Some(exe) = &g.launch_path {
+                if blocked_exes.contains(&exe.to_lowercase()) {
+                    return false;
+                }
+            }
+            if g.source != "manual" {
+                if let Some(dir) = &g.install_dir {
+                    let dir_l = dir.trim_end_matches(['\\', '/']).to_lowercase();
+                    for bd in &blocked_dirs {
+                        if dir_l == *bd || dir_l.starts_with(&format!("{bd}\\")) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            true
+        });
     }
 
     games
@@ -371,6 +412,15 @@ fn add_game(name: String, exe: String, app: tauri::AppHandle) -> Result<Game, St
             exe: path.clone(),
         });
     }
+    // Re-agregar un .exe que el usuario sacó antes = intención explícita de
+    // desbloquearlo: quitarlo de la blocklist para que la tarjeta aparezca.
+    let path_lower = path.to_lowercase();
+    cfg.blocked_games.retain(|b| {
+        !b.exe
+            .as_deref()
+            .map(|e| e.to_lowercase() == path_lower)
+            .unwrap_or(false)
+    });
     save_config(&app, &cfg);
     Ok(Game {
         id,
