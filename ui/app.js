@@ -139,6 +139,7 @@ const I18N = {
     fmtErr: "Formato no soportado. Usá PNG, JPG, GIF o WebP.",
     addedGame: "“{name}” agregado al launcher.",
     alreadyIn: "“{name}” ya estaba en el launcher.",
+    alreadyNamed: "Ese ejecutable ya está en el launcher con el nombre “{existing}”.",
     addErr: "Error al agregar: {err}",
   },
   en: {
@@ -222,6 +223,7 @@ const I18N = {
     fmtErr: "Unsupported format. Use PNG, JPG, GIF or WebP.",
     addedGame: "“{name}” added to the launcher.",
     alreadyIn: "“{name}” was already in the launcher.",
+    alreadyNamed: "That executable is already in the launcher as “{existing}”.",
     addErr: "Failed to add: {err}",
   },
 };
@@ -344,11 +346,11 @@ function baseStatus() {
   return `${games.length} ${t("gamesWord")} · ${parts.join(" · ")}`;
 }
 
-function setStatus(text, flash) {
+function setStatus(text, flash, ms) {
   if (statusTimer) clearTimeout(statusTimer);
   statusEl.textContent = text;
   statusEl.classList.toggle("flash", !!flash);
-  if (flash) statusTimer = setTimeout(() => setStatus(baseStatus(), false), 2600);
+  if (flash) statusTimer = setTimeout(() => setStatus(baseStatus(), false), ms || 2600);
 }
 
 // ---------------------------------------------------------------------------
@@ -1639,8 +1641,17 @@ async function confirmAddGame() {
       setStatus(tf("addedGame", { name: game.name }), true);
     } else {
       // El escáner ya lo tenía bajo otro id (dedup por .exe o nombre).
+      // Decir con qué nombre visible figura ese ejecutable ahora mismo.
+      const exeLower = (addExe || "").toLowerCase();
+      const existing =
+        games.find((g) => (g.launchPath || "").toLowerCase() === exeLower) ||
+        games.find((g) => g.name.trim().toLowerCase() === name.toLowerCase());
       layout();
-      setStatus(tf("alreadyIn", { name }), true);
+      if (existing) {
+        setStatus(tf("alreadyNamed", { existing: existing.name }), true, 6000);
+      } else {
+        setStatus(tf("alreadyIn", { name }), true, 6000);
+      }
     }
     closeAddOverlay();
   } catch (err) {
