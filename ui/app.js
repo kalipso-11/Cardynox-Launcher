@@ -594,15 +594,30 @@ function lazyLoadArt(game, card, dist) {
 // Carrusel
 // ---------------------------------------------------------------------------
 
-/** Distancia con signo y envoltura (wraparound) entre dos índices. */
-function wrappedOffset(idx) {
-  const n = filtered.length;
-  let off = ((idx - active) % n + n) % n;
-  if (off > n / 2) off -= n;
-  return off;
+/** Posición en px de una tarjeta a `x` unidades de tarjeta del centro (continuo, con
+ *  signo). Usa la MISMA curva no uniforme que la vista estática: 0→0, 1→130, 2→218,
+ *  3→275, y más allá extrapolación suave (casi invisible). Simétrica para x<0.
+ *  Al usar la misma curva para estático y animado, la transición entre ambos modos
+ *  no produce saltos. */
+function slotPos(x) {
+  const ax = Math.abs(x);
+  let p;
+  if (ax <= 1) p = 130 * ax;
+  else if (ax <= 2) p = 130 + 88 * (ax - 1);
+  else if (ax <= 3) p = 218 + 57 * (ax - 2);
+  else p = 275 + 30 * (ax - 3);
+  return (x < 0 ? -1 : 1) * p;
 }
 
-function layout(carouselOffset = 0) {
+/** Coloca las tarjetas del carrusel.
+ *  @param scrollSlot posición continua del centro del carrusel en unidades de tarjeta.
+ *    - Modo estático: no se pasa (undefined) → usa `active` (entero). Posiciones
+ *      discretas originales (0, 130, 218, 275). Vista idéntica a siempre.
+ *    - Modo animado: se pasa `autoScrollPos / CARD_WIDTH` (continuo). Las tarjetas
+ *      se mueven suavemente por la curva sin saltos (carrusel infinito). */
+function layout(scrollSlot) {
+  const N = filtered.length;
+  const slot = (scrollSlot === undefined) ? active : scrollSlot;
   const visible = new Set();
 
   filtered.forEach((game, idx) => {
@@ -610,22 +625,17 @@ function layout(carouselOffset = 0) {
     const card = cardEls.get(game.id);
     if (!card) return;
 
-    const off = wrappedOffset(idx);
-    const a = Math.abs(off);
-    const sign = Math.sign(off);
-
-    // Calcular posición continua (incluye el offset del carrusel suave)
-    // Posiciones originales: 0, 130, 218, 275
-    let baseX;
-    if (a === 0) baseX = 0;
-    else if (a === 1) baseX = sign * 130;
-    else if (a === 2) baseX = sign * 218;
-    else baseX = sign * 275;
-    const continuousOff = baseX - carouselOffset;
+    // Distancia continua de la tarjeta al centro del carrusel, con wraparound a N.
+    let x = idx - slot;
+    if (N > 0) {
+      x = ((x % N) + N) % N; // a [0, N)
+      if (x > N / 2) x -= N; // a [-N/2, N/2)
+    }
+    const continuousOff = slotPos(x);
     const continuousA = Math.abs(continuousOff);
-    const continuousSign = Math.sign(continuousOff);
+    const continuousSign = Math.sign(continuousOff) || 1;
 
-    // Interpolar scale y rotación basados en la distancia continua
+    // Interpolar scale y rotación basados en la distancia continua (px).
     let scale, rot, opacity, z;
     if (continuousA < 130) {
       // Entre centro y primera posición lateral
@@ -656,8 +666,15 @@ function layout(carouselOffset = 0) {
       z = 1;
     }
 
-    // Determinar si la tarjeta es activa (la más cercana al centro)
-    const isActive = Math.abs(off) === 0 && Math.abs(carouselOffset) < 73;
+    // Nota: NO se aplica un "fade al borde del wrap". El wrap (±N/2) ya cae más
+    // allá del rango visible (275px = 3 unidades) cuando N >= 6, así que la
+    // tarjeta que hace wrap ya está a opacidad 0 y el salto no se ve. Con pocos
+    // resultados (búsqueda, N chico) un fade extra haría que la central quede
+    // media transparente o que la 2ª portada desaparezca → se muestra todo a su
+    // opacidad base.
+
+    // La tarjeta "activa" (resaltada, clicable) es la más cercana al centro.
+    const isActive = Math.abs(x) < 0.5;
     if (isActive) {
       card.classList.add("active");
       card.style.pointerEvents = "auto";
@@ -670,7 +687,7 @@ function layout(carouselOffset = 0) {
     card.style.opacity = String(opacity);
     card.style.zIndex = String(z);
 
-    lazyLoadArt(game, card, a);
+    lazyLoadArt(game, card, Math.abs(x));
     // Si el juego tiene paneo guardado, re-aplicarlo: el offset en px depende del
     // tamaño del marco (cambia con el preset de tamaño y al re-escalar la UI).
     if (coverPans.has(game.appId || game.id)) applyCardPan(game, card);
@@ -698,6 +715,9 @@ function layout(carouselOffset = 0) {
 function setActive(idx) {
   if (!filtered.length) return;
   active = ((idx % filtered.length) + filtered.length) % filtered.length; // wrap
+  // Si la animación está activa (aunque pausada), resincronizar la posición de
+  // scroll al índice activo para que al reanudar no salte de vuelta.
+  if (autoAnimate) autoScrollPos = active * AUTO_ANIMATE_CARD_WIDTH;
   layout();
   updateSearchStatus();
 }
@@ -744,9 +764,10 @@ function startAutoAnimate() {
         activeName.textContent = current ? current.name : "Sin resultados";
         document.getElementById("btn-play").disabled = !current;
       }
-      // Calcular el offset relativo al centro para el layout
-      const offset = autoScrollPos - active * AUTO_ANIMATE_CARD_WIDTH;
-      layout(offset);
+      // Posición continua del centro en unidades de tarjeta para el layout.
+      // Es continua (no discreta) → las tarjetas se mueven sin saltos.
+      const scrollSlot = autoScrollPos / AUTO_ANIMATE_CARD_WIDTH;
+      layout(scrollSlot);
     }
     autoRafId = requestAnimationFrame(loop);
   };
@@ -755,7 +776,7 @@ function startAutoAnimate() {
 
 function stopAutoAnimate() {
   if (autoRafId != null) { cancelAnimationFrame(autoRafId); autoRafId = null; }
-  layout(0); // resetear posiciones
+  layout(); // vuelve al modo estático (usa `active`, posiciones originales)
 }
 
 /** Pausa temporal: el usuario tocó algo (click en portada o búsqueda). */

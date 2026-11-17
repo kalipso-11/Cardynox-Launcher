@@ -90,16 +90,18 @@
         <section class="dt-info">
           <h3 id="dt-title">—</h3>
 
-          <div class="dt-field" id="dt-source-field">
-            <label data-i18n="lblSource">Origen</label>
-            <span id="dt-source" class="dt-value">—</span>
-          </div>
-
-          <div class="dt-field">
-            <label data-i18n="lblVisibleName">Nombre visible</label>
-            <div class="dt-input-row">
-              <input type="text" id="dt-name" spellcheck="false" />
-              <button id="dt-rename-btn" data-i18n-title="saveNameTitle">✓</button>
+          <!-- Fila unificada: Origen (columna chica) + Nombre visible (columna grande). -->
+          <div class="dt-field-row">
+            <div class="dt-field dt-field-origin" id="dt-source-field">
+              <label data-i18n="lblSource">Origen</label>
+              <span id="dt-source" class="dt-origin-value">—</span>
+            </div>
+            <div class="dt-field dt-field-name">
+              <label data-i18n="lblVisibleName">Nombre visible</label>
+              <div class="dt-input-row">
+                <input type="text" id="dt-name" spellcheck="false" />
+                <button id="dt-rename-btn" data-i18n-title="saveNameTitle">✓</button>
+              </div>
             </div>
           </div>
 
