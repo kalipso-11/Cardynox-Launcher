@@ -213,7 +213,15 @@ fn launch_game(app_id: Option<String>, name: String, launch_path: Option<String>
     //    tokeniza respetando comillas y se añade al command line del .exe.
     if let Some(exe) = &launch_path {
         let mut cmd = std::process::Command::new(exe);
-        if let Some(dir) = &install_dir {
+        // current_dir: usar install_dir solo si existe; si quedó obsoleta
+        // (juego movido de carpeta, exe cambiado vía override), caer a la
+        // carpeta del .exe que se lanza. Evita ERROR_DIRECTORY_NOT_FOUND (267).
+        let cwd: Option<std::path::PathBuf> = install_dir
+            .as_ref()
+            .filter(|d| std::path::Path::new(d.as_str()).is_dir())
+            .map(std::path::PathBuf::from)
+            .or_else(|| std::path::Path::new(exe).parent().map(std::path::PathBuf::from));
+        if let Some(dir) = cwd {
             cmd.current_dir(dir);
         }
         if let Some(a) = &args {
@@ -286,7 +294,12 @@ fn set_launch_exe(id: String, exe_path: String, app: tauri::AppHandle) -> Result
         return Err(format!("No existe ese archivo: {path}"));
     }
     let mut cfg = load_config(&app);
-    cfg.launch_overrides.insert(id, path);
+    cfg.launch_overrides.insert(id.clone(), path.clone());
+    // Juegos manuales: sincronizar el .exe guardado para que install_dir
+    // (carpeta padre del exe) no quede obsoleta al lanzar.
+    if let Some(m) = cfg.manual_games.iter_mut().find(|g| g.id == id) {
+        m.exe = path;
+    }
     save_config(&app, &cfg);
     Ok(())
 }
@@ -1014,10 +1027,15 @@ struct GadgetConfig {
     #[serde(default)]
     size_pct: f64,
     /// Posición guardada del gadget (píxeles lógicos). None = centrar al arrancar.
+    /// Legacy: se usa si monitor_positions no tiene entrada para el monitor actual.
     #[serde(default)]
     pos_x: Option<f64>,
     #[serde(default)]
     pos_y: Option<f64>,
+    /// Posiciones por monitor: clave = "x,y" del monitor, valor = (pos_x, pos_y) del gadget.
+    /// Permite recordar la posición en cada monitor/display por separado.
+    #[serde(default)]
+    monitor_positions: HashMap<String, (f64, f64)>,
     /// Nombre del color de acento del gadget (uno de ACCENT_NAMES; default
     /// violeta). Configs viejas sin el campo deserializan a "" y load_config
     /// lo sanitiza al default.
@@ -1083,6 +1101,7 @@ impl Default for GadgetConfig {
             size_pct: 0.75,
             pos_x: None,
             pos_y: None,
+            monitor_positions: HashMap::new(),
             accent: ACCENT_NAMES[0].to_string(),
             renames: HashMap::new(),
             covers: HashMap::new(),
@@ -1498,6 +1517,7 @@ struct MenuState {
     lang_items: Vec<CheckMenuItem<Wry>>,
     sgdb: MenuItem<Wry>,
     blocked: MenuItem<Wry>,
+    refresh: MenuItem<Wry>,
     animate: CheckMenuItem<Wry>,
     quit: MenuItem<Wry>,
 }
@@ -1538,45 +1558,74 @@ fn set_size_pct(pct: f64, app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Guarda la posición actual de la ventana en config.
+/// Obtiene la clave del monitor actual (basada en la posición del monitor).
+fn get_monitor_key(window: &WebviewWindow) -> Option<String> {
+    let monitor = window.current_monitor().ok()??;
+    let pos = monitor.position();
+    Some(format!("{},{}", pos.x, pos.y))
+}
+
+/// Guarda la posición actual de la ventana en config (por monitor).
 fn save_window_position(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if let (Ok(pos), Ok(scale)) = (window.outer_position(), window.scale_factor()) {
             if scale > 0.0 {
                 let mut cfg = load_config(app);
-                cfg.pos_x = Some(pos.x as f64 / scale);
-                cfg.pos_y = Some(pos.y as f64 / scale);
+                let px = pos.x as f64 / scale;
+                let py = pos.y as f64 / scale;
+                // Guardar en el campo legacy (para compatibilidad)
+                cfg.pos_x = Some(px);
+                cfg.pos_y = Some(py);
+                // Guardar por monitor
+                if let Some(key) = get_monitor_key(&window) {
+                    cfg.monitor_positions.insert(key, (px, py));
+                }
                 save_config(app, &cfg);
             }
         }
     }
 }
 
-/// Al arrancar: restaura la posición guardada si está dentro de un monitor;
-/// si no, centra en el primario.
+/// Verifica si una posición está dentro de algún monitor (al menos 100px visibles).
+fn is_position_valid(window: &WebviewWindow, px: f64, py: f64) -> bool {
+    let monitors = window.available_monitors().unwrap_or_default();
+    monitors.iter().any(|m| {
+        let mpos = m.position();
+        let mscale = m.scale_factor();
+        let ms = mscale.max(0.1);
+        let mx = mpos.x as f64 / ms;
+        let my = mpos.y as f64 / ms;
+        let mw = m.size().width as f64 / ms;
+        let mh = m.size().height as f64 / ms;
+        px < mx + mw - 100.0 && px + 100.0 > mx && py < my + mh - 100.0 && py + 100.0 > my
+    })
+}
+
+/// Al arrancar: restaura la posición guardada para el monitor actual;
+/// si no hay, usa la posición legacy; si no es válida, centra en el primario.
 fn restore_position(window: &WebviewWindow) {
     let app = window.app_handle();
     let cfg = load_config(app);
+
+    // 1) Intentar posición por monitor actual
+    if let Some(key) = get_monitor_key(window) {
+        if let Some(&(px, py)) = cfg.monitor_positions.get(&key) {
+            if is_position_valid(window, px, py) {
+                let _ = window.set_position(LogicalPosition::new(px, py));
+                return;
+            }
+        }
+    }
+
+    // 2) Fallback: posición legacy
     if let (Some(px), Some(py)) = (cfg.pos_x, cfg.pos_y) {
-        // Bounds check: al menos 100px de la ventana deben estar visibles en algún monitor.
-        let monitors = window.available_monitors().unwrap_or_default();
-        let valid = monitors.iter().any(|m| {
-            let mpos = m.position();
-            let mscale = m.scale_factor();
-            let ms = mscale.max(0.1);
-            let mx = mpos.x as f64 / ms;
-            let my = mpos.y as f64 / ms;
-            let mw = m.size().width as f64 / ms;
-            let mh = m.size().height as f64 / ms;
-            // Intersección mínima de 100px en ambos ejes.
-            px < mx + mw - 100.0 && px + 100.0 > mx && py < my + mh - 100.0 && py + 100.0 > my
-        });
-        if valid {
+        if is_position_valid(window, px, py) {
             let _ = window.set_position(LogicalPosition::new(px, py));
             return;
         }
     }
-    // Fallback: centrar en el monitor primario.
+
+    // 3) Fallback final: centrar en el monitor primario
     if let (Ok(Some(monitor)), Ok(scale)) = (window.primary_monitor(), window.scale_factor()) {
         if scale > 0.0 {
             let mx = monitor.position().x as f64 / scale;
@@ -1682,6 +1731,7 @@ fn relabel_menu(state: &MenuState, lang: &str) {
     }
     state.sgdb.set_text(if en { "Enable SGDB" } else { "Activar SGDB" }).ok();
     state.blocked.set_text(if en { "Blocked games" } else { "Juegos bloqueados" }).ok();
+    state.refresh.set_text(if en { "Refresh games" } else { "Actualizar Juegos" }).ok();
     state.animate.set_text(if en { "Animate covers" } else { "Animar Portadas" }).ok();
     state.quit.set_text(if en { "Quit" } else { "Cerrar" }).ok();
 }
@@ -1890,6 +1940,15 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
+    // Opción "Actualizar Juegos": re-escanea y detecta juegos nuevos.
+    let refresh_item = MenuItem::with_id(
+        app,
+        "refresh-games",
+        if cfg.lang == "en" { "Refresh games" } else { "Actualizar Juegos" },
+        true,
+        None::<&str>,
+    )?;
+
     // Toggle "Animar Portadas": las portadas avanzan solas de derecha a izq.
     let animate_item = CheckMenuItemBuilder::with_id(
         "animate",
@@ -1923,6 +1982,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             &lang_submenu as &dyn IsMenuItem<Wry>,
             &sgdb_item as &dyn IsMenuItem<Wry>,
             &blocked_item as &dyn IsMenuItem<Wry>,
+            &refresh_item as &dyn IsMenuItem<Wry>,
             &animate_item as &dyn IsMenuItem<Wry>,
             &quit as &dyn IsMenuItem<Wry>,
         ],
@@ -1944,6 +2004,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         lang_items,
         sgdb: sgdb_item,
         blocked: blocked_item,
+        refresh: refresh_item,
         animate: animate_item,
         quit,
     });
@@ -2014,6 +2075,12 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 "blocked" => {
                     if let Err(e) = show_blocked_window(app) {
                         eprintln!("[cardynox] No se pudo abrir la ventana de juegos bloqueados: {e}");
+                    }
+                }
+                "refresh-games" => {
+                    // Emitir evento al frontend para que re-escanee y refresque el carrusel.
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.emit("cardynox:games-changed", ());
                     }
                 }
                 "animate" => {
