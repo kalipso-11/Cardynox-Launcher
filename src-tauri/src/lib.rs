@@ -151,17 +151,46 @@ fn list_games(app: tauri::AppHandle) -> Vec<Game> {
     });
 
     // 4b) Juegos agregados manualmente. Se descartan si ya hay un juego
-    //     detectado con el mismo .exe o el mismo nombre normalizado (se gana
-    //     el detectado, para no duplicar la tarjeta).
+    //     detectado con: el mismo .exe (base o efectivo con override), el mismo
+    //     nombre normalizado, o la misma carpeta de instalación (el .exe manual
+    //     dentro de la carpeta del juego detectado = el mismo juego: el scanner
+    //     suele encontrar el .exe real en subcarpetas como `bin\`, mientras el
+    //     manual apunta a otro .exe de la raíz). Se gana el detectado, para no
+    //     duplicar la tarjeta.
     for m in &cfg.manual_games {
-        let exe_lower = m.exe.to_lowercase();
+        // .exe "efectivo" del manual (con override si lo tiene). Dos tarjetas
+        // que terminan apuntando al mismo .exe son el mismo juego.
+        let m_exe_base = m.exe.to_lowercase();
+        let m_exe_eff = cfg
+            .launch_overrides
+            .get(&m.id)
+            .cloned()
+            .unwrap_or_else(|| m.exe.clone())
+            .to_lowercase();
         let name_n = normalize_name(&m.name);
+        let manual_dir = std::path::Path::new(&m.exe)
+            .parent()
+            .map(|p| p.to_string_lossy().trim_end_matches(['\\', '/']).to_lowercase())
+            .unwrap_or_default();
         let conflict = games.iter().any(|g| {
-            g.launch_path
+            let g_exe_base = g.launch_path.clone().unwrap_or_default().to_lowercase();
+            let g_exe_eff = cfg
+                .launch_overrides
+                .get(&g.id)
+                .cloned()
+                .unwrap_or_default()
+                .to_lowercase();
+            [m_exe_base.as_str(), m_exe_eff.as_str()].iter().any(|me| {
+                !g_exe_base.is_empty() && (g_exe_base == *me || g_exe_eff == *me)
+            })
+            || normalize_name(&g.name) == name_n
+            || g.install_dir
                 .as_ref()
-                .map(|p| p.to_lowercase() == exe_lower)
+                .map(|d| {
+                    let dl = d.trim_end_matches(['\\', '/']).to_lowercase();
+                    manual_dir == dl || manual_dir.starts_with(&format!("{dl}\\"))
+                })
                 .unwrap_or(false)
-                || normalize_name(&g.name) == name_n
         });
         if conflict {
             continue;
