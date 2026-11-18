@@ -991,6 +991,10 @@ function bindEvents() {
     if (e.key === "Escape" && !document.getElementById("details-overlay").hidden) {
       hideDetails(); return;
     }
+    // Escribiendo en un campo de texto (buscador, nombre/args de detalles):
+    // las flechas mueven el cursor dentro del campo, no las portadas.
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
     if (e.key === "ArrowRight") { autoAnimatePause(); step(1); e.preventDefault(); }
     else if (e.key === "ArrowLeft") { autoAnimatePause(); step(-1); e.preventDefault(); }
     else if (e.key === "Enter" && document.activeElement !== searchInput &&
@@ -1191,6 +1195,9 @@ async function playActive() {
 // ---------------------------------------------------------------------------
 
 let detailsGame = null; // referencia al juego cuyos datos se muestran
+// Rename pendiente: al cerrar detalles se re-busca la portada con el nombre
+// nuevo (solo no-Steam y sin portada manual). null si no hay nada pendiente.
+let pendingCoverRefresh = null;
 
 function showDetails() {
   const game = filtered[active];
@@ -1374,6 +1381,23 @@ function fillDetails(d) {
 function hideDetails() {
   document.getElementById("details-overlay").hidden = true;
   detailsGame = null;
+  maybeRefreshCoverAfterRename();
+}
+
+// Tras un rename sin portada manual: re-resuelve la portada con el nombre
+// nuevo, forzando la re-búsqueda (bypass de la caché). Corre en segundo
+// plano; al terminar repinta el carrusel con lo que haya resuelto.
+function maybeRefreshCoverAfterRename() {
+  const p = pendingCoverRefresh;
+  pendingCoverRefresh = null;
+  if (!p || !invoke) return;
+  invoke("resolve_covers", { requests: [{ id: p.id, name: p.name }], forceIds: [p.id] })
+    .then((res) => {
+      if (res[p.id]) autoCovers.set(p.id, res[p.id]);
+      else autoCovers.delete(p.id); // la re-búsqueda no encontró nada
+      layout();
+    })
+    .catch((err) => console.warn("Re-búsqueda de portada tras rename falló:", err));
 }
 
 async function saveRename() {
@@ -1389,6 +1413,11 @@ async function saveRename() {
     if (g) g.name = newName;
     detailsGame.name = newName;
     document.getElementById("dt-title").textContent = newName;
+    // Sin portada manual y juego no-Steam: al cerrar detalles se re-busca la
+    // portada con el nombre nuevo (la caché de la portada vieja se descarta).
+    pendingCoverRefresh = (!detailsGame.appId && !customCovers.has(key))
+      ? { id: detailsGame.id, name: newName }
+      : null;
     // Feedback visual.
     const btn = document.getElementById("dt-rename-btn");
     btn.classList.add("saved");
@@ -1435,6 +1464,7 @@ async function confirmRemoveGame() {
   const name = detailsGame.name;
   try {
     await invoke("remove_game", { id });
+    pendingCoverRefresh = null; // el juego ya no existe: no re-buscar su portada
     games = games.filter((g) => g.id !== id);
     filtered = filtered.filter((g) => g.id !== id);
     if (active >= filtered.length) active = Math.max(0, filtered.length - 1);
@@ -1472,10 +1502,14 @@ async function applyExe(exe) {
 }
 
 // Abre el selector nativo de Windows y aplica la elección (solo juegos "Otros").
+// El diálogo se abre en la carpeta del .exe actual del juego (no en una
+// carpeta arbitraria): installDir o, como fallback, el directorio del launchPath.
 async function pickAndSetExe() {
   if (!detailsGame || !invoke) return;
   try {
-    const exe = await invoke("pick_exe"); // ruta, o null si se canceló.
+    const lp = detailsGame.launchPath || "";
+    const dir = detailsGame.installDir || (lp ? lp.replace(/[^/\\]+$/, "") : "");
+    const exe = await invoke("pick_exe", { initialDir: dir || null }); // ruta, o null si se canceló.
     if (exe) await applyExe(exe);
   } catch (err) {
     setStatus(tf("pickerError", { err }), true);

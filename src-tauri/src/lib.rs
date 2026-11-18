@@ -347,17 +347,24 @@ fn set_launch_exe(id: String, exe_path: String, app: tauri::AppHandle) -> Result
 }
 
 /// Abre el diálogo nativo de Windows (IFileDialog vía tauri-plugin-dialog) para
-/// elegir el .exe de un juego. Devuelve la ruta elegida o None si se cancela.
-/// Reemplaza al selector anterior por PowerShell: abre al instante, sin consola
-/// intermedia ni demora de arranque.
+/// elegir el .exe de un juego. `initial_dir` (opcional) es la carpeta donde se
+/// abre el diálogo — p. ej. la carpeta del .exe actual del juego, para que el
+/// usuario parta de donde el juego está hoy. Devuelve la ruta elegida o None
+/// si se cancela. Reemplaza al selector anterior por PowerShell: abre al
+/// instante, sin consola intermedia ni demora de arranque.
 #[tauri::command]
-fn pick_exe(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let file = app
+fn pick_exe(app: tauri::AppHandle, initial_dir: Option<String>) -> Result<Option<String>, String> {
+    let builder = app
         .dialog()
         .file()
         .set_title("Elegir ejecutable")
-        .add_filter("Ejecutables (*.exe)", &["exe"])
-        .blocking_pick_file();
+        .add_filter("Ejecutables (*.exe)", &["exe"]);
+    // Solo aplicar el directorio inicial si es una carpeta que existe.
+    let builder = match initial_dir.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(dir) if std::path::Path::new(dir).is_dir() => builder.set_directory(dir),
+        _ => builder,
+    };
+    let file = builder.blocking_pick_file();
     Ok(file.and_then(|p| p.as_path().map(|s| s.to_string_lossy().to_string())))
 }
 
@@ -1486,6 +1493,7 @@ async fn sgdb_cover_by_steam_appid(
 async fn resolve_covers(
     app: tauri::AppHandle,
     requests: Vec<CoverRequest>,
+    force_ids: Option<Vec<String>>,
 ) -> HashMap<String, AutoCover> {
     let mut cfg = load_config(&app);
     let client = match reqwest::Client::builder()
@@ -1501,11 +1509,18 @@ async fn resolve_covers(
     };
 
     let sgdb_key = cfg.sgdb_key.clone().filter(|k| !k.trim().is_empty());
+    // Ids a re-resolver forzadamente (p. ej. tras un rename: el nombre cambió,
+    // la caché vieja quedó obsoleta y hay que buscar con el nombre nuevo).
+    let force: std::collections::HashSet<String> = force_ids.unwrap_or_default().into_iter().collect();
     let mut resolved_count = 0;
+    let mut cache_dirty = false;
 
     for req in &requests {
-        // (1) Caché: si ya está resuelto, no toco la red.
-        if cfg.auto_covers.contains_key(&req.id) {
+        // (1) Caché: si ya está resuelto, no toco la red. Con `force` se
+        //     descarta la entrada vieja y se re-resuelve con el nombre nuevo.
+        if force.contains(&req.id) {
+            cache_dirty = cfg.auto_covers.remove(&req.id).is_some();
+        } else if cfg.auto_covers.contains_key(&req.id) {
             continue;
         }
         // (2) Steam con AppId conocido (su CDN falló): SGDB por appid, lo más fiable.
@@ -1535,7 +1550,9 @@ async fn resolve_covers(
         }
     }
 
-    if resolved_count > 0 {
+    // Persistir: nuevas resoluciones o caché invalidada por un force (si la
+    // re-búsqueda no encontró nada, la entrada vieja debe seguir borrada).
+    if resolved_count > 0 || cache_dirty {
         save_config(&app, &cfg);
     }
 
