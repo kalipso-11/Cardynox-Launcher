@@ -925,7 +925,7 @@ function bindEvents() {
 
   // Buscador en vivo. Escribir pausa la animación automática (es una búsqueda).
   let searchIdleTimer = null;
-  const SEARCH_IDLE_MS = 60000; // 1 minuto sin actividad → limpiar búsqueda
+  const SEARCH_IDLE_MS = 30000; // 30 segundos sin actividad → limpiar búsqueda
   function resetSearchIdle() {
     if (searchIdleTimer) clearTimeout(searchIdleTimer);
     searchIdleTimer = setTimeout(() => {
@@ -944,12 +944,7 @@ function bindEvents() {
   searchInput.addEventListener("focus", resetSearchIdle);
   searchInput.addEventListener("click", resetSearchIdle);
   // Cruz para limpiar la búsqueda: borra el texto y re-filtra (vuelve a mostrar todos).
-  searchClear.addEventListener("click", () => {
-    searchInput.value = "";
-    applyFilter();       // re-corta `filtered` → todos los juegos de nuevo
-    autoAnimatePause();  // limpiar también cuenta como interacción de búsqueda
-    searchInput.focus(); // deja el foco listo para escribir otra vez
-  });
+  searchClear.addEventListener("click", () => clearSearch(true));
 
   // Flechas prev/next del carrusel: navegan 1 tarjeta. Reutilizan step(), que
   // aplica el mismo throttle (260 ms) que la rueda → no hay saltos en cadena.
@@ -991,6 +986,9 @@ function bindEvents() {
     if (e.key === "Escape" && !document.getElementById("details-overlay").hidden) {
       hideDetails(); return;
     }
+    // Teclas fuera del overlay (p. ej. flechas con foco en body) también cuentan
+    // como interacción si detalles está abierto.
+    if (!document.getElementById("details-overlay").hidden) resetDetailsIdle();
     // Escribiendo en un campo de texto (buscador, nombre/args de detalles):
     // las flechas mueven el cursor dentro del campo, no las portadas.
     const t = e.target;
@@ -1023,6 +1021,13 @@ function bindEvents() {
 
   // Overlay de detalles: cerrar.
   document.getElementById("btn-close-details").addEventListener("click", hideDetails);
+
+  // Auto-cierre de detalles: cualquier interacción con el overlay (mouse, rueda)
+  // reinicia el contador; 1 minuto sin interacción → se cierra solo.
+  const detailsOverlay = document.getElementById("details-overlay");
+  for (const ev of ["mousemove", "mousedown", "keydown", "wheel"]) {
+    detailsOverlay.addEventListener(ev, resetDetailsIdle, { passive: true });
+  }
 
   // Overlay: renombrar.
   document.getElementById("dt-rename-btn").addEventListener("click", saveRename);
@@ -1169,9 +1174,21 @@ function bindEvents() {
 
 }
 
+// Limpia el campo de búsqueda y re-muestra todos los juegos. focus=true deja
+// el foco en el buscador (lo usa la cruz; al jugar no conviene robar foco).
+function clearSearch(focus = false) {
+  if (!searchInput.value.trim()) return;
+  searchInput.value = "";
+  applyFilter();       // re-corta `filtered` → todos los juegos de nuevo
+  autoAnimatePause();  // limpiar también cuenta como interacción de búsqueda
+  if (focus) searchInput.focus();
+}
+
 async function playActive() {
   const game = filtered[active];
   if (!game) return;
+  // Al jugar (click en portada activa, botón Jugar o Enter) se borra la búsqueda.
+  clearSearch();
   if (!invoke) {
     setStatus(t("browserPlay"), true);
     return;
@@ -1195,6 +1212,14 @@ async function playActive() {
 // ---------------------------------------------------------------------------
 
 let detailsGame = null; // referencia al juego cuyos datos se muestran
+// Auto-cierre de detalles: 1 minuto sin interacción sobre el overlay → se cierra.
+let detailsIdleTimer = null;
+const DETAILS_IDLE_MS = 60000;
+function resetDetailsIdle() {
+  if (detailsIdleTimer) clearTimeout(detailsIdleTimer);
+  if (document.getElementById("details-overlay").hidden) return;
+  detailsIdleTimer = setTimeout(() => hideDetails(), DETAILS_IDLE_MS);
+}
 // Rename pendiente: al cerrar detalles se re-busca la portada con el nombre
 // nuevo (solo no-Steam y sin portada manual). null si no hay nada pendiente.
 let pendingCoverRefresh = null;
@@ -1301,6 +1326,7 @@ function showDetails() {
   document.getElementById("details-overlay").hidden = false;
   // Re-centra la portada ya que el marco tiene tamaño real (box.clientWidth > 0).
   requestAnimationFrame(syncDetailsArt);
+  resetDetailsIdle(); // reinicia el contador de auto-cierre (1 min sin interacción)
 
   if (game.appId) {
     // Steam: cargar detalles ricos desde Rust.
@@ -1379,6 +1405,7 @@ function fillDetails(d) {
 }
 
 function hideDetails() {
+  if (detailsIdleTimer) { clearTimeout(detailsIdleTimer); detailsIdleTimer = null; }
   document.getElementById("details-overlay").hidden = true;
   detailsGame = null;
   maybeRefreshCoverAfterRename();
